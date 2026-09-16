@@ -1,6 +1,6 @@
+using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json.Serialization;
 using Microsoft.Data.SqlClient;
 
 namespace ProductsImport.Models;
@@ -16,7 +16,7 @@ public class ConnectionProfile
     /// <summary>Base64 DPAPI-protected password. Empty when using Windows auth.</summary>
     public string EncryptedPassword { get; set; } = string.Empty;
 
-    [JsonIgnore]
+    [IgnoreDataMember]
     public string Password
     {
         get => Unprotect(EncryptedPassword);

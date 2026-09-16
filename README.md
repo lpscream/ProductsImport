@@ -1,9 +1,9 @@
 # ProductsImport
 
-Windows-приложение (WinForms, .NET 8) для импорта товаров из прайс-листа/накладной
-Excel (`.xlsx`, `.xls`) или `.csv` в справочник товаров MS SQL Server
-(таблицы `ass1`, `ass2`, `ass3`, `ass4`, `gru2`, `cls2`, `nds1`) — замена
-ручному запуску T-SQL скрипта импорта.
+Windows-приложение (WinForms, .NET Framework 4.8) для импорта товаров из
+прайс-листа/накладной Excel (`.xlsx`, `.xls`) или `.csv` в справочник товаров
+MS SQL Server (таблицы `ass1`, `ass2`, `ass3`, `ass4`, `gru2`, `cls2`, `nds1`)
+— замена ручному запуску T-SQL скрипта импорта.
 
 ## Возможности
 
@@ -11,6 +11,8 @@ Excel (`.xlsx`, `.xls`) или `.csv` в справочник товаров MS 
   или Windows-аутентификация) с сохранением списка подключений в
   `%AppData%\ProductsImport\connections.json`. Пароль хранится в
   зашифрованном виде (Windows DPAPI, привязан к пользователю Windows).
+  JSON читается/пишется штатным `DataContractJsonSerializer` из .NET
+  Framework — без дополнительных NuGet-пакетов.
 - **Открытие документа.** `.xlsx`/`.xls` читаются через NPOI, `.csv` —
   встроенным парсером с автоопределением разделителя (`,`, `;`, Tab).
   Можно выбрать лист и указать строку, с которой начинается шапка таблицы —
@@ -67,22 +69,22 @@ ProductsImport/
 
 ## Сборка
 
-1. Установите **Visual Studio 2022** (17.8+) с нагрузкой **.NET desktop
-   development** (нужен .NET 8 SDK — ставится вместе с этой нагрузкой либо
-   отдельно с https://dotnet.microsoft.com).
+1. Установите **Visual Studio 2022** с нагрузкой **.NET desktop development**
+   (включает .NET Framework 4.8 targeting pack; при необходимости его также
+   можно поставить отдельно — https://dotnet.microsoft.com/download/dotnet-framework/net48).
 2. Откройте `ProductsImport.sln`.
 3. Visual Studio восстановит NuGet-пакеты автоматически (`Microsoft.Data.SqlClient`,
-   `NPOI`, `System.Security.Cryptography.ProtectedData`) при первой сборке.
+   `NPOI`) при первой сборке.
 4. Соберите решение (`Ctrl+Shift+B`) и запустите `ProductsImport`.
 
-Либо из командной строки Windows с установленным .NET 8 SDK:
+Либо из командной строки Windows (Developer Command Prompt / .NET SDK):
 
 ```
 dotnet build ProductsImport.sln -c Release
 ```
 
 Готовый исполняемый файл будет в
-`ProductsImport\bin\Release\net8.0-windows\ProductsImport.exe`.
+`ProductsImport\bin\Release\net48\ProductsImport.exe`.
 
 ## Соответствие таблицам БД
 
