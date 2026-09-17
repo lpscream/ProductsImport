@@ -44,12 +44,33 @@ public static class ErrorReportService
             row.CreateCell(columnCount).SetCellValue(error.Message);
         }
 
-        for (var c = 0; c <= columnCount; c++)
+        for (var c = 0; c < columnCount; c++)
         {
-            sheet.AutoSizeColumn(c);
+            var header = headerRow != null && c < headerRow.Length ? headerRow[c] : null;
+            var values = errors.Select(e => c < e.RawValues.Length ? e.RawValues[c] : null);
+            SetColumnWidth(sheet, c, header, values);
         }
+
+        SetColumnWidth(sheet, columnCount, "Ошибка импорта", errors.Select(e => e.Message));
 
         using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
         workbook.Write(stream);
+    }
+
+    /// <summary>
+    /// Sizes a column from the character length of its content instead of NPOI's AutoSizeColumn,
+    /// which needs SkiaSharp's native library for font metrics - a dependency that isn't reliably
+    /// deployed for classic .NET Framework apps that only pull it in transitively through NPOI.
+    /// </summary>
+    private static void SetColumnWidth(ISheet sheet, int columnIndex, string? header, IEnumerable<string?> values)
+    {
+        var maxLength = header?.Length ?? 0;
+        foreach (var value in values)
+        {
+            maxLength = Math.Max(maxLength, value?.Length ?? 0);
+        }
+
+        var characters = Math.Min(Math.Max(maxLength, 6) + 2, 60);
+        sheet.SetColumnWidth(columnIndex, characters * 256);
     }
 }
