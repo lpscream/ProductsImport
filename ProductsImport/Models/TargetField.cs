@@ -27,5 +27,8 @@ public enum TargetField
     Vat,
 
     /// <summary>Excise (подакцизный), yes/no -> ass1007.</summary>
-    Excise
+    Excise,
+
+    /// <summary>УКТЗЕД code -> ass2031. Optional: left empty when not mapped or not filled in.</summary>
+    Uktzed
 }

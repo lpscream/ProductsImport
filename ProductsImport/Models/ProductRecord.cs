@@ -12,6 +12,9 @@ public class ProductRecord
     public bool Excise { get; set; }
     public long GroupCode { get; set; }
 
+    /// <summary>УКТЗЕД code -> ass2031. Empty when not present in the document.</summary>
+    public string Uktzed { get; set; } = string.Empty;
+
     /// <summary>1-based row number in the source document, used for error reporting.</summary>
     public int SourceRowNumber { get; set; }
 }

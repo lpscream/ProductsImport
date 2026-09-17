@@ -165,6 +165,7 @@ public class ImportOrchestrator
             ResolveVat(row, mapping, defaultVat);
             row.WeightedResolved = ResolveYesNo(row, mapping, TargetField.Weighted, defaultWeighted);
             row.ExciseResolved = ResolveYesNo(row, mapping, TargetField.Excise, defaultExcise);
+            row.Uktzed = mapping.GetValue(row.RawValues, TargetField.Uktzed) ?? string.Empty;
         }
 
         ResolveArticles(rows, mapping);
@@ -416,6 +417,7 @@ public class ImportOrchestrator
                     Weighted = row.WeightedResolved,
                     Excise = row.ExciseResolved,
                     GroupCode = row.GroupCode!.Value,
+                    Uktzed = row.Uktzed,
                     SourceRowNumber = row.SourceRowNumber
                 };
 
