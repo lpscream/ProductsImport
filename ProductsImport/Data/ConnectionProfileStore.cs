@@ -7,7 +7,7 @@ public static class ConnectionProfileStore
 {
     private const string FileName = "connections.json";
 
-    public static List<ConnectionProfile> Load() => JsonFileStore<ConnectionProfile>.Load(FileName);
+    public static List<ConnectionProfile> Load() => JsonStore.LoadList<ConnectionProfile>(FileName);
 
-    public static void Save(List<ConnectionProfile> profiles) => JsonFileStore<ConnectionProfile>.Save(FileName, profiles);
+    public static void Save(List<ConnectionProfile> profiles) => JsonStore.SaveList(FileName, profiles);
 }

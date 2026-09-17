@@ -24,6 +24,9 @@ public class ColumnMapping
 
     public bool IsMapped(TargetField field) => GetColumn(field).HasValue;
 
+    /// <summary>A snapshot of the mapping, e.g. for saving as an <see cref="ImportProfile"/>.</summary>
+    public Dictionary<int, TargetField> ToDictionary() => new(_map);
+
     public string? GetValue(string[] row, TargetField field)
     {
         var col = GetColumn(field);

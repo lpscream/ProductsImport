@@ -19,10 +19,15 @@ public class MainForm : Form
     private readonly Label _lblHeaderRow = new() { Left = 310, Top = 82, Width = 150, Text = "Строка с заголовками:" };
     private readonly NumericUpDown _numHeaderRow = new() { Left = 460, Top = 78, Width = 60, Minimum = 1, Maximum = 1, Value = 1 };
 
+    private readonly Label _lblImportProfile = new() { Left = 12, Top = 116, Width = 90, Text = "Профиль импорта:" };
+    private readonly ComboBox _cmbImportProfile = new() { Left = 105, Top = 112, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Button _btnSaveImportProfile = new() { Left = 333, Top = 111, Width = 190, Text = "Сохранить как профиль..." };
+    private readonly Button _btnDeleteImportProfile = new() { Left = 529, Top = 111, Width = 140, Text = "Удалить профиль" };
+
     private readonly DataGridView _grid = new()
     {
         Left = 12,
-        Top = 112,
+        Top = 148,
         Width = 760,
         Height = 350,
         Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
@@ -41,13 +46,14 @@ public class MainForm : Form
 
     private ConnectionProfile? _activeProfile;
     private SpreadsheetDocument? _document;
+    private List<ImportProfile> _importProfiles;
 
     public MainForm()
     {
         Text = "Импорт товаров в справочник";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(784, 500);
-        MinimumSize = new Size(650, 400);
+        ClientSize = new Size(784, 536);
+        MinimumSize = new Size(650, 436);
 
         Controls.Add(_btnConnection);
         Controls.Add(_lblConnection);
@@ -57,16 +63,31 @@ public class MainForm : Form
         Controls.Add(_cmbSheets);
         Controls.Add(_lblHeaderRow);
         Controls.Add(_numHeaderRow);
+        Controls.Add(_lblImportProfile);
+        Controls.Add(_cmbImportProfile);
+        Controls.Add(_btnSaveImportProfile);
+        Controls.Add(_btnDeleteImportProfile);
         Controls.Add(_grid);
         Controls.Add(_btnStartImport);
 
         _btnStartImport.Left = 12;
-        _btnStartImport.Top = 465;
+        _btnStartImport.Top = 501;
         _btnStartImport.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+
+        _importProfiles = ImportProfileStore.Load();
+        RefreshImportProfileList(null);
+        ApplyLastUsedSettings();
 
         _btnConnection.Click += (_, _) => ChooseConnection();
         _btnOpenFile.Click += (_, _) => OpenDocument();
         _cmbSheets.SelectedIndexChanged += (_, _) => LoadSheetIntoGrid();
+        _cmbImportProfile.SelectedIndexChanged += (_, _) =>
+        {
+            ApplyHeaderRowFromProfile();
+            PersistLastUsedSettings();
+        };
+        _btnSaveImportProfile.Click += (_, _) => SaveCurrentAsImportProfile();
+        _btnDeleteImportProfile.Click += (_, _) => DeleteSelectedImportProfile();
         _btnStartImport.Click += async (_, _) => await StartImportAsync();
     }
 
@@ -77,7 +98,44 @@ public class MainForm : Form
         {
             _activeProfile = form.SelectedProfile;
             _lblConnection.Text = _activeProfile.ToString();
+            PersistLastUsedSettings();
         }
+    }
+
+    private void ApplyLastUsedSettings()
+    {
+        var settings = AppSettingsStore.Load();
+
+        if (settings.LastConnectionName != null)
+        {
+            var match = ConnectionProfileStore.Load()
+                .FirstOrDefault(p => p.Name == settings.LastConnectionName && p.Server == settings.LastConnectionServer);
+            if (match != null)
+            {
+                _activeProfile = match;
+                _lblConnection.Text = match.ToString();
+            }
+        }
+
+        if (settings.LastImportProfileName != null)
+        {
+            var match = _cmbImportProfile.Items.Cast<object>()
+                .FirstOrDefault(i => i is ImportProfile p && p.Name == settings.LastImportProfileName);
+            if (match != null)
+            {
+                _cmbImportProfile.SelectedItem = match;
+            }
+        }
+    }
+
+    private void PersistLastUsedSettings()
+    {
+        AppSettingsStore.Save(new AppSettings
+        {
+            LastConnectionName = _activeProfile?.Name,
+            LastConnectionServer = _activeProfile?.Server,
+            LastImportProfileName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name
+        });
     }
 
     private void OpenDocument()
@@ -126,7 +184,7 @@ public class MainForm : Form
         var rows = _document.GetRows(sheetName);
 
         _numHeaderRow.Maximum = Math.Max(rows.Count, 1);
-        _numHeaderRow.Value = 1;
+        ApplyHeaderRowFromProfile();
 
         _grid.Columns.Clear();
         _grid.Rows.Clear();
@@ -149,6 +207,14 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>Applies the selected import profile's header row number (clamped to what the
+    /// currently loaded sheet allows), or resets to 1 when no profile is selected.</summary>
+    private void ApplyHeaderRowFromProfile()
+    {
+        var headerRowNumber = _cmbImportProfile.SelectedItem is ImportProfile profile ? profile.HeaderRowNumber : 1;
+        _numHeaderRow.Value = Math.Min(Math.Max(headerRowNumber, (int)_numHeaderRow.Minimum), (int)_numHeaderRow.Maximum);
+    }
+
     private static string ExcelColumnName(int columnIndex)
     {
         var dividend = columnIndex + 1;
@@ -163,6 +229,120 @@ public class MainForm : Form
         return name;
     }
 
+    private void RefreshImportProfileList(string? selectName)
+    {
+        _cmbImportProfile.Items.Clear();
+        _cmbImportProfile.Items.Add("— не выбран —");
+        foreach (var profile in _importProfiles.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            _cmbImportProfile.Items.Add(profile);
+        }
+
+        var match = selectName == null
+            ? null
+            : _cmbImportProfile.Items.Cast<object>().FirstOrDefault(i => i is ImportProfile p && p.Name == selectName);
+        _cmbImportProfile.SelectedItem = match ?? _cmbImportProfile.Items[0];
+    }
+
+    /// <summary>Reads the header row and data rows for the open document at the currently chosen
+    /// sheet/header-row, showing a validation message and returning null if that isn't possible yet.</summary>
+    private (string[] HeaderRow, List<string[]> DataRows, int ColumnCount)? TryGetDocumentLayout()
+    {
+        if (_document == null || _cmbSheets.SelectedItem is not string sheetName)
+        {
+            MessageBox.Show(this, "Сначала откройте документ с товарами.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        var allRows = _document.GetRows(sheetName);
+        var headerRowIndex = (int)_numHeaderRow.Value - 1;
+        if (headerRowIndex < 0 || headerRowIndex >= allRows.Count)
+        {
+            MessageBox.Show(this, "Некорректно указана строка с заголовками.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        var headerRow = allRows[headerRowIndex];
+        var dataRows = allRows.Skip(headerRowIndex + 1).ToList();
+        if (dataRows.Count == 0)
+        {
+            MessageBox.Show(this, "После указанной строки заголовков нет данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        var columnCount = Math.Max(headerRow.Length, dataRows.Max(r => r.Length));
+        return (headerRow, dataRows, columnCount);
+    }
+
+    private void SaveCurrentAsImportProfile()
+    {
+        var layout = TryGetDocumentLayout();
+        if (layout is null)
+        {
+            return;
+        }
+
+        var (headerRow, dataRows, columnCount) = layout.Value;
+        var sampleRows = dataRows.Take(5).ToList();
+        var initialMapping = (_cmbImportProfile.SelectedItem as ImportProfile)?.Columns;
+
+        using var mappingForm = new ColumnMappingForm(headerRow, sampleRows, columnCount, initialMapping);
+        if (mappingForm.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var currentName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name ?? string.Empty;
+        using var prompt = new TextPromptForm("Сохранить профиль", "Название профиля импорта:", currentName);
+        if (prompt.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var name = prompt.Value;
+        var existing = _importProfiles.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.CurrentCultureIgnoreCase));
+        if (existing != null)
+        {
+            var overwrite = MessageBox.Show(this, $"Профиль \"{name}\" уже существует. Заменить его?",
+                "Подтверждение", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (overwrite != DialogResult.Yes)
+            {
+                return;
+            }
+        }
+
+        var profile = existing ?? new ImportProfile { Name = name };
+        profile.HeaderRowNumber = (int)_numHeaderRow.Value;
+        profile.Columns = mappingForm.Mapping.ToDictionary();
+        if (existing == null)
+        {
+            _importProfiles.Add(profile);
+        }
+
+        ImportProfileStore.Save(_importProfiles);
+        RefreshImportProfileList(name);
+        MessageBox.Show(this, "Профиль сохранён.", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void DeleteSelectedImportProfile()
+    {
+        if (_cmbImportProfile.SelectedItem is not ImportProfile profile)
+        {
+            MessageBox.Show(this, "Выберите профиль из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (MessageBox.Show(this, $"Удалить профиль \"{profile.Name}\"?", "Подтверждение",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _importProfiles.Remove(profile);
+        ImportProfileStore.Save(_importProfiles);
+        RefreshImportProfileList(null);
+    }
+
     private async Task StartImportAsync()
     {
         if (_activeProfile == null)
@@ -171,29 +351,14 @@ public class MainForm : Form
             return;
         }
 
-        if (_document == null || _cmbSheets.SelectedItem is not string sheetName)
+        var layout = TryGetDocumentLayout();
+        if (layout is null)
         {
-            MessageBox.Show(this, "Сначала откройте документ с товарами.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        var allRows = _document.GetRows(sheetName);
+        var (headerRow, dataRows, columnCount) = layout.Value;
         var headerRowIndex = (int)_numHeaderRow.Value - 1;
-        if (headerRowIndex < 0 || headerRowIndex >= allRows.Count)
-        {
-            MessageBox.Show(this, "Некорректно указана строка с заголовками.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var headerRow = allRows[headerRowIndex];
-        var dataRows = allRows.Skip(headerRowIndex + 1).ToList();
-        if (dataRows.Count == 0)
-        {
-            MessageBox.Show(this, "После указанной строки заголовков нет данных для импорта.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var columnCount = Math.Max(headerRow.Length, dataRows.Max(r => r.Length));
 
         SqlConnection? connection = null;
         try
@@ -218,7 +383,8 @@ public class MainForm : Form
             }
 
             var sampleRows = dataRows.Take(5).ToList();
-            using var mappingForm = new ColumnMappingForm(headerRow, sampleRows, columnCount);
+            var initialMapping = (_cmbImportProfile.SelectedItem as ImportProfile)?.Columns;
+            using var mappingForm = new ColumnMappingForm(headerRow, sampleRows, columnCount, initialMapping);
             if (mappingForm.ShowDialog(this) != DialogResult.OK)
             {
                 return;
@@ -283,5 +449,8 @@ public class MainForm : Form
         _btnStartImport.Enabled = !busy;
         _btnConnection.Enabled = !busy;
         _btnOpenFile.Enabled = !busy;
+        _cmbImportProfile.Enabled = !busy;
+        _btnSaveImportProfile.Enabled = !busy;
+        _btnDeleteImportProfile.Enabled = !busy;
     }
 }

@@ -9,6 +9,9 @@ public class ImportProfile
 {
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>1-based row number where the column headers are; import starts on the next row.</summary>
+    public int HeaderRowNumber { get; set; } = 1;
+
     /// <summary>Column index (0-based) -> target field.</summary>
     public Dictionary<int, TargetField> Columns { get; set; } = new();
 

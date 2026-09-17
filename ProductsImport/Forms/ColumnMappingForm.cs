@@ -1,12 +1,8 @@
-using ProductsImport.Data;
 using ProductsImport.Models;
 
 namespace ProductsImport.Forms;
 
-/// <summary>
-/// Lets the user map each spreadsheet column to a database target field, and save/reuse that
-/// mapping as a named profile for documents that share the same column layout.
-/// </summary>
+/// <summary>Lets the user map each spreadsheet column to a database target field.</summary>
 public class ColumnMappingForm : Form
 {
     private sealed record FieldOption(TargetField Field, string Label);
@@ -25,17 +21,12 @@ public class ColumnMappingForm : Form
         new(TargetField.Uktzed, "УКТЗЕД")
     };
 
-    private readonly Label _lblProfile = new() { Left = 12, Top = 16, Width = 60, Text = "Профиль:" };
-    private readonly ComboBox _cmbProfile = new() { Left = 76, Top = 12, Width = 230, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _btnSaveProfile = new() { Left = 312, Top = 11, Width = 190, Text = "Сохранить как профиль..." };
-    private readonly Button _btnDeleteProfile = new() { Left = 508, Top = 11, Width = 140, Text = "Удалить профиль" };
-
     private readonly DataGridView _grid = new()
     {
         Left = 12,
-        Top = 45,
+        Top = 12,
         Width = 660,
-        Height = 345,
+        Height = 380,
         Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         AllowUserToAddRows = false,
         AllowUserToDeleteRows = false,
@@ -47,7 +38,7 @@ public class ColumnMappingForm : Form
     private readonly Label _lblHint = new()
     {
         Left = 12,
-        Top = 398,
+        Top = 400,
         Width = 660,
         Height = 40,
         Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
@@ -58,29 +49,28 @@ public class ColumnMappingForm : Form
     private readonly Button _btnOk = new() { Width = 90, Text = "Далее", DialogResult = DialogResult.OK };
     private readonly Button _btnCancel = new() { Width = 90, Text = "Отмена", DialogResult = DialogResult.Cancel };
 
-    private List<ImportProfile> _profiles;
-
     public ColumnMapping Mapping { get; } = new();
 
-    public ColumnMappingForm(string[] headerRow, List<string[]> sampleRows, int columnCount)
+    /// <param name="initialMapping">
+    /// Pre-fills the grid, e.g. from a saved <see cref="ImportProfile"/>. Column indices missing
+    /// from it are left as "не использовать".
+    /// </param>
+    public ColumnMappingForm(string[] headerRow, List<string[]> sampleRows, int columnCount,
+        Dictionary<int, TargetField>? initialMapping = null)
     {
         Text = "Сопоставление колонок";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
-        ClientSize = new Size(684, 495);
-        MinimumSize = new Size(660, 400);
+        ClientSize = new Size(684, 480);
+        MinimumSize = new Size(500, 350);
 
         _btnOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
         _btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        _btnOk.Top = 453;
-        _btnCancel.Top = 453;
+        _btnOk.Top = 445;
+        _btnCancel.Top = 445;
         _btnOk.Left = ClientSize.Width - 200;
         _btnCancel.Left = ClientSize.Width - 100;
 
-        Controls.Add(_lblProfile);
-        Controls.Add(_cmbProfile);
-        Controls.Add(_btnSaveProfile);
-        Controls.Add(_btnDeleteProfile);
         Controls.Add(_grid);
         Controls.Add(_lblHint);
         Controls.Add(_btnOk);
@@ -88,14 +78,7 @@ public class ColumnMappingForm : Form
         AcceptButton = _btnOk;
         CancelButton = _btnCancel;
 
-        BuildGrid(headerRow, sampleRows, columnCount);
-
-        _profiles = ImportProfileStore.Load();
-        RefreshProfileList(null);
-
-        _cmbProfile.SelectedIndexChanged += (_, _) => ApplySelectedProfile();
-        _btnSaveProfile.Click += (_, _) => SaveCurrentAsProfile();
-        _btnDeleteProfile.Click += (_, _) => DeleteSelectedProfile();
+        BuildGrid(headerRow, sampleRows, columnCount, initialMapping);
 
         _btnOk.Click += (_, e) =>
         {
@@ -106,7 +89,8 @@ public class ColumnMappingForm : Form
         };
     }
 
-    private void BuildGrid(string[] headerRow, List<string[]> sampleRows, int columnCount)
+    private void BuildGrid(string[] headerRow, List<string[]> sampleRows, int columnCount,
+        Dictionary<int, TargetField>? initialMapping)
     {
         _grid.Columns.Add("colIndex", "Колонка");
         _grid.Columns.Add("colHeader", "Заголовок в документе");
@@ -128,8 +112,9 @@ public class ColumnMappingForm : Form
             var header = c < headerRow.Length ? headerRow[c] : string.Empty;
             var sample = sampleRows.Select(r => c < r.Length ? r[c] : string.Empty)
                 .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+            var field = initialMapping != null && initialMapping.TryGetValue(c, out var mapped) ? mapped : TargetField.None;
 
-            _grid.Rows.Add(ExcelColumnName(c), header, sample, TargetField.None);
+            _grid.Rows.Add(ExcelColumnName(c), header, sample, field);
         }
     }
 
@@ -145,106 +130,6 @@ public class ColumnMappingForm : Form
         }
 
         return name;
-    }
-
-    private void RefreshProfileList(string? selectName)
-    {
-        _cmbProfile.Items.Clear();
-        _cmbProfile.Items.Add("— не выбран —");
-        foreach (var profile in _profiles.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
-        {
-            _cmbProfile.Items.Add(profile);
-        }
-
-        var match = selectName == null
-            ? null
-            : _cmbProfile.Items.Cast<object>().FirstOrDefault(i => i is ImportProfile p && p.Name == selectName);
-        _cmbProfile.SelectedItem = match ?? _cmbProfile.Items[0];
-    }
-
-    private void ApplySelectedProfile()
-    {
-        if (_cmbProfile.SelectedItem is not ImportProfile profile)
-        {
-            return;
-        }
-
-        for (var r = 0; r < _grid.Rows.Count; r++)
-        {
-            var field = profile.Columns.TryGetValue(r, out var mapped) ? mapped : TargetField.None;
-            _grid.Rows[r].Cells["colTarget"].Value = field;
-        }
-    }
-
-    private void SaveCurrentAsProfile()
-    {
-        _grid.EndEdit();
-
-        var columns = new Dictionary<int, TargetField>();
-        for (var r = 0; r < _grid.Rows.Count; r++)
-        {
-            var value = _grid.Rows[r].Cells["colTarget"].Value;
-            var field = value is TargetField tf ? tf : TargetField.None;
-            if (field != TargetField.None)
-            {
-                columns[r] = field;
-            }
-        }
-
-        if (columns.Count == 0)
-        {
-            MessageBox.Show(this, "Сначала сопоставьте хотя бы одну колонку.", "Проверка",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var currentName = (_cmbProfile.SelectedItem as ImportProfile)?.Name ?? string.Empty;
-        using var prompt = new TextPromptForm("Сохранить профиль", "Название профиля:", currentName);
-        if (prompt.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        var name = prompt.Value;
-        var existing = _profiles.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.CurrentCultureIgnoreCase));
-        if (existing != null)
-        {
-            var overwrite = MessageBox.Show(this, $"Профиль \"{name}\" уже существует. Заменить его?",
-                "Подтверждение", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (overwrite != DialogResult.Yes)
-            {
-                return;
-            }
-
-            existing.Columns = columns;
-        }
-        else
-        {
-            _profiles.Add(new ImportProfile { Name = name, Columns = columns });
-        }
-
-        ImportProfileStore.Save(_profiles);
-        RefreshProfileList(name);
-        MessageBox.Show(this, "Профиль сохранён.", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    private void DeleteSelectedProfile()
-    {
-        if (_cmbProfile.SelectedItem is not ImportProfile profile)
-        {
-            MessageBox.Show(this, "Выберите профиль из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (MessageBox.Show(this, $"Удалить профиль \"{profile.Name}\"?", "Подтверждение",
-            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-        {
-            return;
-        }
-
-        _profiles.Remove(profile);
-        ImportProfileStore.Save(_profiles);
-        RefreshProfileList(null);
     }
 
     private bool TryBuildMapping()
