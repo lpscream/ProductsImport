@@ -131,10 +131,11 @@ public class SqlServerRepository
             "ass2019, ass2020, ass2021, ass2022, ass2023, ass2024, ass2025, ass2026, ass2027, ass2028, " +
             "ass2029, ass2030, ass2031, ass2032) " +
             "VALUES (@id, 0, 0, 0.0, 0.0, 0.0, @name, '', 0.0, 2, 0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, " +
-            "0.0, 0.0, 0, 0.0, 0, '', '', 1, 0.0, 0, 0.0, 0.0, '', 0)", connection, transaction))
+            "0.0, 0.0, 0, 0.0, 0, '', '', 1, 0.0, 0, 0.0, 0.0, @uktzed, 0)", connection, transaction))
         {
             cmd.Parameters.AddWithValue("@id", record.ArticleId);
             cmd.Parameters.AddWithValue("@name", record.Name);
+            cmd.Parameters.AddWithValue("@uktzed", record.Uktzed);
             cmd.ExecuteNonQuery();
         }
 

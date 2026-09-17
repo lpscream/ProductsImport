@@ -19,6 +19,7 @@ public class ImportRow
     public long? UnitId { get; set; }
     public long? VatId { get; set; }
     public long? GroupCode { get; set; }
+    public string Uktzed { get; set; } = string.Empty;
 
     /// <summary>Set as soon as the row is known to be unimportable; skips further resolution.</summary>
     public string? Error { get; set; }
