@@ -30,10 +30,9 @@ public class MainForm : Form
 
     private static readonly string[] BarcodeActionLabels = { "Сгенерировать штрих-код", "Не импортировать", "Ввести вручную" };
 
-    // --- Connection / settings ---
+    // --- Connection ---
     private readonly Button _btnConnection = new() { Left = 12, Top = 12, Width = 200, Text = "Подключение к базе данных..." };
-    private readonly Label _lblConnection = new() { Left = 220, Top = 17, Width = 540, Text = "Подключение не выбрано" };
-    private readonly Button _btnSettings = new() { Left = 770, Top = 12, Width = 118, Text = "Настройки..." };
+    private readonly Label _lblConnection = new() { Left = 220, Top = 17, Width = 660, Text = "Подключение не выбрано" };
 
     // --- Document / sheet / header row ---
     private readonly Button _btnOpenFile = new() { Left = 12, Top = 45, Width = 200, Text = "Открыть документ..." };
@@ -101,10 +100,15 @@ public class MainForm : Form
     private readonly ComboBox _cmbDefaultGroup = new() { Left = 235, Top = 20, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _cmbDefaultUnit = new() { Left = 235, Top = 50, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _cmbDefaultVat = new() { Left = 235, Top = 80, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly RadioButton _rbWeightedYes = new() { Left = 235, Top = 111, Width = 60, Text = "Да", AutoSize = true };
-    private readonly RadioButton _rbWeightedNo = new() { Left = 300, Top = 111, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
-    private readonly RadioButton _rbExciseYes = new() { Left = 235, Top = 141, Width = 60, Text = "Да", AutoSize = true };
-    private readonly RadioButton _rbExciseNo = new() { Left = 300, Top = 141, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
+
+    // Each pair needs its own container: WinForms groups RadioButtons by immediate parent, so
+    // without separate panels these four would all belong to one group (only one could be checked).
+    private readonly Panel _weightedPanel = new() { Left = 235, Top = 108, Width = 200, Height = 24 };
+    private readonly RadioButton _rbWeightedYes = new() { Left = 0, Top = 0, Width = 60, Text = "Да", AutoSize = true };
+    private readonly RadioButton _rbWeightedNo = new() { Left = 65, Top = 0, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
+    private readonly Panel _excisePanel = new() { Left = 235, Top = 138, Width = 200, Height = 24 };
+    private readonly RadioButton _rbExciseYes = new() { Left = 0, Top = 0, Width = 60, Text = "Да", AutoSize = true };
+    private readonly RadioButton _rbExciseNo = new() { Left = 65, Top = 0, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
 
     // --- Barcode resolution section ---
     private readonly GroupBox _barcodeGroupBox = new()
@@ -142,7 +146,6 @@ public class MainForm : Form
     private ConnectionProfile? _activeProfile;
     private SpreadsheetDocument? _document;
     private List<ImportProfile> _importProfiles;
-    private bool _showBarcodeIssuesList = true;
     private bool _suppressMappingRefresh;
 
     private List<GroupInfo>? _groups;
@@ -165,7 +168,6 @@ public class MainForm : Form
 
         Controls.Add(_btnConnection);
         Controls.Add(_lblConnection);
-        Controls.Add(_btnSettings);
         Controls.Add(_btnOpenFile);
         Controls.Add(_lblFile);
         Controls.Add(_lblSheet);
@@ -192,7 +194,6 @@ public class MainForm : Form
         RelayoutSections();
 
         _btnConnection.Click += async (_, _) => await ChooseConnectionAsync();
-        _btnSettings.Click += (_, _) => OpenSettings();
         _btnOpenFile.Click += (_, _) => OpenDocument();
         _cmbSheets.SelectedIndexChanged += (_, _) => LoadSheetIntoGrid();
         _grid.CellClick += (_, e) =>
@@ -245,20 +246,9 @@ public class MainForm : Form
         }
     }
 
-    private void OpenSettings()
-    {
-        using var form = new SettingsForm(_showBarcodeIssuesList);
-        if (form.ShowDialog(this) == DialogResult.OK)
-        {
-            _showBarcodeIssuesList = form.ShowBarcodeIssuesList;
-            PersistLastUsedSettings();
-        }
-    }
-
     private void ApplyLastUsedSettings()
     {
         var settings = AppSettingsStore.Load();
-        _showBarcodeIssuesList = settings.ShowBarcodeIssuesList;
 
         if (settings.LastConnectionName != null)
         {
@@ -288,8 +278,7 @@ public class MainForm : Form
         {
             LastConnectionName = _activeProfile?.Name,
             LastConnectionServer = _activeProfile?.Server,
-            LastImportProfileName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name,
-            ShowBarcodeIssuesList = _showBarcodeIssuesList
+            LastImportProfileName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name
         });
     }
 
@@ -728,11 +717,13 @@ public class MainForm : Form
         _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 82, Width = 220, Text = "Ставка НДС по умолчанию:" });
         _defaultsGroupBox.Controls.Add(_cmbDefaultVat);
         _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 113, Width = 220, Text = "Товар весовой:" });
-        _defaultsGroupBox.Controls.Add(_rbWeightedYes);
-        _defaultsGroupBox.Controls.Add(_rbWeightedNo);
+        _weightedPanel.Controls.Add(_rbWeightedYes);
+        _weightedPanel.Controls.Add(_rbWeightedNo);
+        _defaultsGroupBox.Controls.Add(_weightedPanel);
         _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 143, Width = 220, Text = "Товар подакцизный:" });
-        _defaultsGroupBox.Controls.Add(_rbExciseYes);
-        _defaultsGroupBox.Controls.Add(_rbExciseNo);
+        _excisePanel.Controls.Add(_rbExciseYes);
+        _excisePanel.Controls.Add(_rbExciseNo);
+        _defaultsGroupBox.Controls.Add(_excisePanel);
 
         _cmbDefaultGroup.SelectedIndexChanged += (_, _) => ResetPendingImport();
         _cmbDefaultUnit.SelectedIndexChanged += (_, _) => ResetPendingImport();
@@ -977,7 +968,7 @@ public class MainForm : Form
         orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise);
 
         var issueRows = rows.Where(r => r.BarcodeNeedsResolution).ToList();
-        if (issueRows.Count > 0 && _showBarcodeIssuesList)
+        if (issueRows.Count > 0)
         {
             BuildBarcodeSection(issueRows);
             SetBarcodeSectionVisible(true);
@@ -986,11 +977,6 @@ public class MainForm : Form
             _pendingHeaderRow = headerRow;
             _btnStartImport.Text = "Импортировать";
             return;
-        }
-
-        foreach (var row in issueRows)
-        {
-            orchestrator.ApplyBarcodeResolution(row, BarcodeAction.Generate, null);
         }
 
         await RunImportAsync(orchestrator, rows, headerRow);
