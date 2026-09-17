@@ -25,10 +25,19 @@ public static class BarcodeGenerator
     /// <summary>Generates a random EAN-13 barcode not present in <paramref name="existing"/>, and reserves it.</summary>
     public static string GenerateUniqueEan13(HashSet<string> existing, Random random)
     {
+        // The 12-digit body is InternalPrefix (2 digits) followed by 10 more digits; Random.Next only
+        // covers the Int32 range, so those 10 digits are generated one at a time rather than as a whole number.
+        var digits = new char[10];
+
         string candidate;
         do
         {
-            var body = InternalPrefix + random.Next(0, 100_000_000).ToString("D9");
+            for (var i = 0; i < digits.Length; i++)
+            {
+                digits[i] = (char)('0' + random.Next(0, 10));
+            }
+
+            var body = InternalPrefix + new string(digits);
             var check = ComputeEan13CheckDigit(body);
             candidate = body + check;
         } while (existing.Contains(candidate));

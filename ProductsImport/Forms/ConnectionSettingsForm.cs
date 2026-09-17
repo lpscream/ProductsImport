@@ -10,7 +10,7 @@ public class ConnectionSettingsForm : Form
     private readonly Button _btnAdd = new() { Left = 325, Top = 15, Width = 110, Text = "Добавить..." };
     private readonly Button _btnEdit = new() { Left = 325, Top = 50, Width = 110, Text = "Изменить..." };
     private readonly Button _btnDelete = new() { Left = 325, Top = 85, Width = 110, Text = "Удалить" };
-    private readonly Button _btnSelect = new() { Left = 148, Top = 265, Width = 100, Text = "Выбрать", DialogResult = DialogResult.OK };
+    private readonly Button _btnSelect = new() { Left = 148, Top = 265, Width = 100, Text = "Выбрать" };
     private readonly Button _btnClose = new() { Left = 254, Top = 265, Width = 90, Text = "Закрыть", DialogResult = DialogResult.Cancel };
 
     private List<ConnectionProfile> _profiles;
@@ -45,22 +45,26 @@ public class ConnectionSettingsForm : Form
             }
         }
 
-        _list.DoubleClick += (_, _) => EditSelected();
+        _list.DoubleClick += (_, _) => SelectAndClose();
         _btnAdd.Click += (_, _) => AddNew();
         _btnEdit.Click += (_, _) => EditSelected();
         _btnDelete.Click += (_, _) => DeleteSelected();
-        _btnSelect.Click += (_, e) =>
+        _btnSelect.Click += (_, e) => SelectAndClose();
+    }
+
+    /// <summary>Applies the highlighted connection and closes the dialog, for both the "Выбрать"
+    /// button and double-clicking a row.</summary>
+    private void SelectAndClose()
+    {
+        if (_list.SelectedItem is ConnectionProfile profile)
         {
-            if (_list.SelectedItem is ConnectionProfile profile)
-            {
-                SelectedProfile = profile;
-            }
-            else
-            {
-                DialogResult = DialogResult.None;
-                MessageBox.Show(this, "Выберите подключение из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        };
+            SelectedProfile = profile;
+            DialogResult = DialogResult.OK;
+        }
+        else
+        {
+            MessageBox.Show(this, "Выберите подключение из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void RefreshList()

@@ -9,8 +9,23 @@ public class ImportProfile
 {
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>1-based row number where the column headers are; import starts on the next row.</summary>
+    public int HeaderRowNumber { get; set; } = 1;
+
     /// <summary>Column index (0-based) -> target field.</summary>
     public Dictionary<int, TargetField> Columns { get; set; } = new();
+
+    /// <summary>gru2001, used when the group column isn't mapped or a cell is blank/unrecognized.</summary>
+    public long? DefaultGroupCode { get; set; }
+
+    /// <summary>cls2001, used when the unit column isn't mapped or a cell is blank/unrecognized.</summary>
+    public long? DefaultUnitId { get; set; }
+
+    /// <summary>nds1001, used when the VAT column isn't mapped or a cell is blank/unrecognized.</summary>
+    public long? DefaultVatId { get; set; }
+
+    public bool DefaultWeighted { get; set; }
+    public bool DefaultExcise { get; set; }
 
     public override string ToString() => Name;
 }
