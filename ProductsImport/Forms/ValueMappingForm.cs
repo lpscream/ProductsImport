@@ -1,13 +1,15 @@
+using ProductsImport.Localization;
+
 namespace ProductsImport.Forms;
 
 /// <summary>
 /// Generic "map each unique raw document value to a database value" dialog, used for both
 /// "Сопоставление налоговых групп" (raw value -> VatInfo) and "Сопоставление акцизности товара"
-/// (raw value -> "Да"/"Нет"). A row left as "— не выбрано —" means "use the default rule".
+/// (raw value -> "Да"/"Нет"). A row left unset means "use the default rule".
 /// </summary>
 public class ValueMappingForm : Form
 {
-    private static readonly object NotSet = "— не выбрано —";
+    private static readonly object NotSet = Strings.T("Common_NotSelectedValue");
 
     private readonly DataGridView _grid = new()
     {
@@ -23,10 +25,10 @@ public class ValueMappingForm : Form
         SelectionMode = DataGridViewSelectionMode.CellSelect
     };
 
-    private readonly Button _btnOk = new() { Width = 90, Text = "ОК", DialogResult = DialogResult.OK };
-    private readonly Button _btnCancel = new() { Width = 90, Text = "Отмена", DialogResult = DialogResult.Cancel };
+    private readonly Button _btnOk = new() { Width = 90, Text = Strings.T("Common_OK"), DialogResult = DialogResult.OK };
+    private readonly Button _btnCancel = new() { Width = 90, Text = Strings.T("Common_Cancel"), DialogResult = DialogResult.Cancel };
 
-    /// <summary>Raw value -> chosen database value. Rows left as "— не выбрано —" are omitted.</summary>
+    /// <summary>Raw value -> chosen database value. Rows left unset are omitted.</summary>
     public Dictionary<string, object> Mapping { get; } = new();
 
     public ValueMappingForm(string title, string rawColumnHeader, string targetColumnHeader,
@@ -53,13 +55,21 @@ public class ValueMappingForm : Form
         CancelButton = _btnCancel;
 
         _grid.Columns.Add("colRaw", rawColumnHeader);
-        _grid.Columns.Add(new DataGridViewComboBoxColumn
+
+        // Deliberately using the unbound Items collection (not DataSource): a DataGridViewComboBoxColumn
+        // bound via DataSource without DisplayMember/ValueMember renders every row using the *first*
+        // item's text and commits the first item regardless of what was actually picked. Items behaves
+        // like a plain ComboBox - it just calls ToString() per item and stores the object itself as the
+        // cell value, which is exactly what we want for these mixed DB-value lists.
+        var targetColumn = new DataGridViewComboBoxColumn
         {
             Name = "colTarget",
             HeaderText = targetColumnHeader,
-            DataSource = new object[] { NotSet }.Concat(options).ToArray(),
             FlatStyle = FlatStyle.Flat
-        });
+        };
+        targetColumn.Items.Add(NotSet);
+        targetColumn.Items.AddRange(options.ToArray());
+        _grid.Columns.Add(targetColumn);
         _grid.Columns["colRaw"].ReadOnly = true;
 
         foreach (var raw in rawValues)

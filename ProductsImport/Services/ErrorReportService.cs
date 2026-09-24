@@ -1,5 +1,6 @@
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
+using ProductsImport.Localization;
 using ProductsImport.Models;
 
 namespace ProductsImport.Services;
@@ -10,7 +11,7 @@ public static class ErrorReportService
     public static void WriteErrors(string filePath, string[]? headerRow, IReadOnlyList<RowImportError> errors)
     {
         using var workbook = new XSSFWorkbook();
-        var sheet = workbook.CreateSheet("Ошибки импорта");
+        var sheet = workbook.CreateSheet(Strings.T("ErrRep_SheetName"));
 
         var boldStyle = workbook.CreateCellStyle();
         var boldFont = workbook.CreateFont();
@@ -24,12 +25,12 @@ public static class ErrorReportService
         for (var c = 0; c < columnCount; c++)
         {
             var cell = outRow.CreateCell(c);
-            cell.SetCellValue(headerRow != null && c < headerRow.Length ? headerRow[c] : $"Колонка {c + 1}");
+            cell.SetCellValue(headerRow != null && c < headerRow.Length ? headerRow[c] : Strings.T("ErrRep_ColumnFallback", c + 1));
             cell.CellStyle = boldStyle;
         }
 
         var errorCell = outRow.CreateCell(columnCount);
-        errorCell.SetCellValue("Ошибка импорта");
+        errorCell.SetCellValue(Strings.T("ErrRep_ColHeader"));
         errorCell.CellStyle = boldStyle;
 
         var rowIndex = headerRowIndex + 1;
@@ -51,7 +52,7 @@ public static class ErrorReportService
             SetColumnWidth(sheet, c, header, values);
         }
 
-        SetColumnWidth(sheet, columnCount, "Ошибка импорта", errors.Select(e => e.Message));
+        SetColumnWidth(sheet, columnCount, Strings.T("ErrRep_ColHeader"), errors.Select(e => e.Message));
 
         using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
         workbook.Write(stream);

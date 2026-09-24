@@ -1,4 +1,5 @@
 using ProductsImport.Data;
+using ProductsImport.Localization;
 using ProductsImport.Models;
 
 namespace ProductsImport.Forms;
@@ -7,11 +8,11 @@ namespace ProductsImport.Forms;
 public class ConnectionSettingsForm : Form
 {
     private readonly ListBox _list = new() { Left = 15, Top = 15, Width = 300, Height = 240 };
-    private readonly Button _btnAdd = new() { Left = 325, Top = 15, Width = 110, Text = "Добавить..." };
-    private readonly Button _btnEdit = new() { Left = 325, Top = 50, Width = 110, Text = "Изменить..." };
-    private readonly Button _btnDelete = new() { Left = 325, Top = 85, Width = 110, Text = "Удалить" };
-    private readonly Button _btnSelect = new() { Left = 148, Top = 265, Width = 100, Text = "Выбрать" };
-    private readonly Button _btnClose = new() { Left = 254, Top = 265, Width = 90, Text = "Закрыть", DialogResult = DialogResult.Cancel };
+    private readonly Button _btnAdd = new() { Left = 325, Top = 15, Width = 110, Text = Strings.T("ConnList_BtnAdd") };
+    private readonly Button _btnEdit = new() { Left = 325, Top = 50, Width = 110, Text = Strings.T("ConnList_BtnEdit") };
+    private readonly Button _btnDelete = new() { Left = 325, Top = 85, Width = 110, Text = Strings.T("ConnList_BtnDelete") };
+    private readonly Button _btnSelect = new() { Left = 148, Top = 265, Width = 100, Text = Strings.T("ConnList_BtnSelect") };
+    private readonly Button _btnClose = new() { Left = 254, Top = 265, Width = 90, Text = Strings.T("Common_Close"), DialogResult = DialogResult.Cancel };
 
     private List<ConnectionProfile> _profiles;
 
@@ -19,7 +20,7 @@ public class ConnectionSettingsForm : Form
 
     public ConnectionSettingsForm(ConnectionProfile? currentlySelected)
     {
-        Text = "Подключения к базе данных";
+        Text = Strings.T("ConnList_Title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
@@ -63,7 +64,7 @@ public class ConnectionSettingsForm : Form
         }
         else
         {
-            MessageBox.Show(this, "Выберите подключение из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("ConnList_Msg_SelectFromList"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -110,7 +111,7 @@ public class ConnectionSettingsForm : Form
             return;
         }
 
-        if (MessageBox.Show(this, $"Удалить подключение \"{profile.Name}\"?", "Подтверждение",
+        if (MessageBox.Show(this, Strings.T("ConnList_Msg_DeleteConfirm", profile.Name), Strings.T("Common_Confirmation"),
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;

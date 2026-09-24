@@ -152,7 +152,8 @@ public class SqlServerRepository
         {
             cmd.Parameters.AddWithValue("@id", record.ArticleId);
             cmd.Parameters.AddWithValue("@name", record.Name);
-            cmd.Parameters.AddWithValue("@excise", record.Excise ? 1 : 0);
+            // ass2010: 1 = подакцизный, 2 = не подакцизный (matches the legacy T-SQL script's constant).
+            cmd.Parameters.AddWithValue("@excise", record.Excise ? 1 : 2);
             cmd.Parameters.AddWithValue("@uktzed", record.Uktzed);
             cmd.ExecuteNonQuery();
         }

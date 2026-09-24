@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.SqlClient;
 using ProductsImport.Data;
+using ProductsImport.Localization;
 using ProductsImport.Models;
 
 namespace ProductsImport.Services;
@@ -79,6 +80,7 @@ public class ImportOrchestrator
     public NeedsAnalysis Analyze(
         List<ImportRow> rows,
         ColumnMapping mapping,
+        IReadOnlyDictionary<string, UnitInfo>? unitMapping = null,
         IReadOnlyDictionary<string, VatInfo>? taxRateMapping = null,
         IReadOnlyDictionary<string, bool>? exciseMapping = null)
     {
@@ -107,7 +109,8 @@ public class ImportOrchestrator
             if (unitMapped && !analysis.NeedsUnitDefault)
             {
                 var raw = mapping.GetValue(row.RawValues, TargetField.Unit);
-                if (raw == null || MatchUnit(raw) == null)
+                var resolvedByMapping = raw != null && unitMapping != null && unitMapping.ContainsKey(raw);
+                if (raw == null || (!resolvedByMapping && MatchUnit(raw) == null))
                 {
                     analysis.NeedsUnitDefault = true;
                 }
@@ -169,6 +172,7 @@ public class ImportOrchestrator
         VatInfo? defaultVat,
         bool defaultWeighted,
         bool defaultExcise,
+        IReadOnlyDictionary<string, UnitInfo>? unitMapping = null,
         IReadOnlyDictionary<string, VatInfo>? taxRateMapping = null,
         IReadOnlyDictionary<string, bool>? exciseMapping = null)
     {
@@ -177,7 +181,7 @@ public class ImportOrchestrator
             ResolveName(row, mapping);
             ResolveBarcode(row, mapping);
             ResolveGroup(row, mapping, defaultGroup);
-            ResolveUnit(row, mapping, defaultUnit);
+            ResolveUnit(row, mapping, defaultUnit, unitMapping);
             ResolveVat(row, mapping, defaultVat, taxRateMapping);
             row.WeightedResolved = ResolveYesNo(row, mapping, TargetField.Weighted, defaultWeighted);
             row.ExciseResolved = ResolveExcise(row, mapping, defaultExcise, exciseMapping);
@@ -192,7 +196,7 @@ public class ImportOrchestrator
         var name = mapping.GetValue(row.RawValues, TargetField.Name);
         if (string.IsNullOrWhiteSpace(name))
         {
-            row.Error = "Не указано наименование товара";
+            row.Error = Strings.T("Err_NoName");
             return;
         }
 
@@ -233,7 +237,7 @@ public class ImportOrchestrator
 
             case BarcodeAction.Skip:
                 row.BarcodeNeedsResolution = false;
-                row.Error ??= "Пропущено пользователем: нет штрих-кода";
+                row.Error ??= Strings.T("Err_SkippedNoBarcode");
                 return true;
 
             case BarcodeAction.Manual:
@@ -266,7 +270,7 @@ public class ImportOrchestrator
         {
             if (defaultGroup == null)
             {
-                row.Error ??= "Не удалось определить группу товара";
+                row.Error ??= Strings.T("Err_NoGroup");
                 return;
             }
 
@@ -284,15 +288,26 @@ public class ImportOrchestrator
         row.PendingNewGroupName = raw;
     }
 
-    private void ResolveUnit(ImportRow row, ColumnMapping mapping, UnitInfo? defaultUnit)
+    /// <summary>An explicit entry in <paramref name="unitMapping"/> (set up via "Сопоставление единиц
+    /// измерения") takes priority over auto-matching the raw value by name/id against cls2, which in turn
+    /// takes priority over <paramref name="defaultUnit"/> for blank cells or values matched by neither.</summary>
+    private void ResolveUnit(ImportRow row, ColumnMapping mapping, UnitInfo? defaultUnit, IReadOnlyDictionary<string, UnitInfo>? unitMapping)
     {
         var raw = mapping.GetValue(row.RawValues, TargetField.Unit);
-        var match = raw != null ? MatchUnit(raw) : null;
-        var unit = match ?? defaultUnit;
+        UnitInfo? unit;
+        if (raw != null && unitMapping != null && unitMapping.TryGetValue(raw, out var mapped))
+        {
+            unit = mapped;
+        }
+        else
+        {
+            var match = raw != null ? MatchUnit(raw) : null;
+            unit = match ?? defaultUnit;
+        }
 
         if (unit == null)
         {
-            row.Error ??= "Не удалось определить единицу измерения";
+            row.Error ??= Strings.T("Err_NoUnit");
             return;
         }
 
@@ -323,7 +338,7 @@ public class ImportOrchestrator
 
         if (vat == null)
         {
-            row.Error ??= "Не удалось определить ставку НДС";
+            row.Error ??= Strings.T("Err_NoVat");
             return;
         }
 
@@ -373,7 +388,7 @@ public class ImportOrchestrator
 
             if (_articleAllocator.IsTaken(articleId))
             {
-                row.Error ??= $"Артикул {articleId} уже используется другим товаром";
+                row.Error ??= Strings.T("Err_ArticleTaken", articleId);
                 continue;
             }
 
@@ -505,7 +520,7 @@ public class ImportOrchestrator
         {
             if (row.BarcodeNeedsResolution && !row.HasError)
             {
-                row.Error = "Штрих-код не был разрешён перед импортом";
+                row.Error = Strings.T("Err_BarcodeUnresolved");
             }
 
             if (row.HasError)
@@ -549,7 +564,7 @@ public class ImportOrchestrator
                 {
                     SourceRowNumber = row.SourceRowNumber,
                     RawValues = row.RawValues,
-                    Message = $"Ошибка базы данных: {ex.Message}"
+                    Message = Strings.T("Err_DbError", ex.Message)
                 });
             }
         }

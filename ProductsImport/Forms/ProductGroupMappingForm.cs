@@ -1,3 +1,4 @@
+using ProductsImport.Localization;
 using ProductsImport.Models;
 
 namespace ProductsImport.Forms;
@@ -10,10 +11,10 @@ namespace ProductsImport.Forms;
 /// </summary>
 public class ProductGroupMappingForm : Form
 {
-    private static readonly object NoOverride = "— не менять —";
+    private static readonly object NoOverride = Strings.T("GroupMap_NoOverride");
 
     private readonly ComboBox _cmbApplyGroup = new() { Left = 175, Top = 12, Width = 260, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _btnApplyToSelected = new() { Left = 445, Top = 11, Width = 170, Text = "Применить к выделенным" };
+    private readonly Button _btnApplyToSelected = new() { Left = 445, Top = 11, Width = 170, Text = Strings.T("GroupMap_BtnApply") };
 
     private readonly DataGridView _grid = new()
     {
@@ -31,21 +32,21 @@ public class ProductGroupMappingForm : Form
         EditMode = DataGridViewEditMode.EditOnEnter
     };
 
-    private readonly Button _btnOk = new() { Width = 90, Text = "ОК", DialogResult = DialogResult.OK };
-    private readonly Button _btnCancel = new() { Width = 90, Text = "Отмена", DialogResult = DialogResult.Cancel };
+    private readonly Button _btnOk = new() { Width = 90, Text = Strings.T("Common_OK"), DialogResult = DialogResult.OK };
+    private readonly Button _btnCancel = new() { Width = 90, Text = Strings.T("Common_Cancel"), DialogResult = DialogResult.Cancel };
 
     /// <summary>SourceRowNumber -> chosen group, for rows the user explicitly overrode.</summary>
     public Dictionary<int, GroupInfo> Overrides { get; } = new();
 
     public ProductGroupMappingForm(List<ImportRow> rows, List<GroupInfo> groups, IReadOnlyDictionary<int, GroupInfo> existingOverrides)
     {
-        Text = $"Сопоставление групп товаров ({rows.Count})";
+        Text = Strings.T("GroupMap_TitleFormat", rows.Count);
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ClientSize = new Size(724, 520);
         MinimumSize = new Size(560, 380);
 
-        Controls.Add(new Label { Left = 12, Top = 16, Width = 160, Text = "Для выделенных строк:" });
+        Controls.Add(new Label { Left = 12, Top = 16, Width = 160, Text = Strings.T("Main_LblForSelectedRows") });
         Controls.Add(_cmbApplyGroup);
         Controls.Add(_btnApplyToSelected);
         Controls.Add(_grid);
@@ -71,25 +72,30 @@ public class ProductGroupMappingForm : Form
 
     private void BuildGrid(List<ImportRow> rows, List<GroupInfo> groups, IReadOnlyDictionary<int, GroupInfo> existingOverrides)
     {
-        _grid.Columns.Add("colRow", "Строка");
-        _grid.Columns.Add("colName", "Наименование");
-        _grid.Columns.Add("colCurrent", "Текущая группа");
-        _grid.Columns.Add(new DataGridViewComboBoxColumn
+        _grid.Columns.Add("colRow", Strings.T("Common_Row"));
+        _grid.Columns.Add("colName", Strings.T("Common_Name"));
+        _grid.Columns.Add("colCurrent", Strings.T("GroupMap_ColCurrent"));
+
+        // Unbound Items, not DataSource: see the comment in ValueMappingForm for why - DataSource without
+        // DisplayMember/ValueMember makes every row display and commit the first item in the list.
+        var groupColumn = new DataGridViewComboBoxColumn
         {
             Name = "colGroup",
-            HeaderText = "Новая группа",
-            DataSource = new object[] { NoOverride }.Concat(groups.Cast<object>()).ToArray(),
+            HeaderText = Strings.T("GroupMap_ColNew"),
             FlatStyle = FlatStyle.Flat
-        });
+        };
+        groupColumn.Items.Add(NoOverride);
+        groupColumn.Items.AddRange(groups.Cast<object>().ToArray());
+        _grid.Columns.Add(groupColumn);
 
         foreach (var row in rows)
         {
             var currentDisplay = row.PendingNewGroupName != null
-                ? $"(будет создана: {row.PendingNewGroupName})"
+                ? Strings.T("GroupMap_PendingCreate", row.PendingNewGroupName)
                 : groups.FirstOrDefault(g => g.Code == row.GroupCode)?.Name ?? "—";
             var initialOverride = existingOverrides.TryGetValue(row.SourceRowNumber, out var group) ? (object)group : NoOverride;
 
-            _grid.Rows.Add(row.SourceRowNumber, row.Name ?? "(без наименования)", currentDisplay, initialOverride);
+            _grid.Rows.Add(row.SourceRowNumber, row.Name ?? Strings.T("Common_NoName"), currentDisplay, initialOverride);
         }
 
         _grid.Columns["colRow"].ReadOnly = true;
@@ -101,13 +107,13 @@ public class ProductGroupMappingForm : Form
     {
         if (_cmbApplyGroup.SelectedItem is not GroupInfo group)
         {
-            MessageBox.Show(this, "Выберите группу из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("GroupMap_Msg_SelectGroup"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (_grid.SelectedRows.Count == 0)
         {
-            MessageBox.Show(this, "Выделите хотя бы одну строку товара.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("GroupMap_Msg_SelectRows"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
