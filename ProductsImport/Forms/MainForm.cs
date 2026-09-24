@@ -24,6 +24,7 @@ public class MainForm : Form
         new(TargetField.Weighted, "Весовой (да/нет)"),
         new(TargetField.Unit, "Единица измерения"),
         new(TargetField.Vat, "НДС, %"),
+        new(TargetField.TaxRate, "Налоговая ставка"),
         new(TargetField.Excise, "Подакцизный (да/нет)"),
         new(TargetField.Uktzed, "УКТЗЕД")
     };
@@ -66,7 +67,7 @@ public class MainForm : Form
     {
         Left = 12,
         Width = 860,
-        Height = 268,
+        Height = 292,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         Text = "Сопоставление колонок",
         Visible = false
@@ -85,6 +86,15 @@ public class MainForm : Form
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         SelectionMode = DataGridViewSelectionMode.CellSelect
     };
+
+    private readonly Button _btnGroupMapping = new() { Left = 10, Top = 220, Width = 260, Text = "Сопоставление групп товаров" };
+    private readonly Button _btnTaxRateMapping = new() { Left = 280, Top = 220, Width = 260, Text = "Сопоставление налоговых групп", Enabled = false };
+    private readonly Button _btnExciseMapping = new() { Left = 550, Top = 220, Width = 260, Text = "Сопоставление акцизности товара", Enabled = false };
+
+    private bool _suppressMappingComboRefresh;
+    private readonly Dictionary<string, VatInfo> _taxRateMapping = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> _exciseMapping = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, GroupInfo> _groupOverrides = new();
 
     // --- Defaults section ---
     private readonly GroupBox _defaultsGroupBox = new()
@@ -219,6 +229,9 @@ public class MainForm : Form
         };
         _btnSaveImportProfile.Click += (_, _) => SaveCurrentAsImportProfile();
         _btnDeleteImportProfile.Click += (_, _) => DeleteSelectedImportProfile();
+        _btnGroupMapping.Click += async (_, _) => await OpenGroupMappingAsync();
+        _btnTaxRateMapping.Click += (_, _) => OpenTaxRateMapping();
+        _btnExciseMapping.Click += (_, _) => OpenExciseMapping();
         _btnStartImport.Click += async (_, _) => await StartImportAsync();
 
         Shown += async (_, _) => await OnShownAsync();
@@ -571,10 +584,13 @@ public class MainForm : Form
     private void BuildMappingGroupBox()
     {
         _mappingGroupBox.Controls.Add(_mappingGrid);
+        _mappingGroupBox.Controls.Add(_btnGroupMapping);
+        _mappingGroupBox.Controls.Add(_btnTaxRateMapping);
+        _mappingGroupBox.Controls.Add(_btnExciseMapping);
         _mappingGroupBox.Controls.Add(new Label
         {
             Left = 10,
-            Top = 220,
+            Top = 252,
             Width = 838,
             Height = 34,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -602,7 +618,72 @@ public class MainForm : Form
                 _mappingGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             }
         };
-        _mappingGrid.CellValueChanged += (_, _) => ResetPendingImport();
+        _mappingGrid.CellValueChanged += (_, _) =>
+        {
+            if (_suppressMappingComboRefresh)
+            {
+                return;
+            }
+
+            ResetPendingImport();
+            RefreshMappingComboOptions();
+        };
+    }
+
+    /// <summary>
+    /// Once a target field is picked for one column, it disappears from every other column's dropdown
+    /// (until unpicked again), so the same field can't be mapped twice by accident.
+    /// </summary>
+    private void RefreshMappingComboOptions()
+    {
+        _suppressMappingComboRefresh = true;
+        try
+        {
+            var selections = new TargetField[_mappingGrid.Rows.Count];
+            for (var r = 0; r < _mappingGrid.Rows.Count; r++)
+            {
+                var value = _mappingGrid.Rows[r].Cells["colTarget"].Value;
+                selections[r] = value is TargetField tf ? tf : TargetField.None;
+            }
+
+            for (var r = 0; r < _mappingGrid.Rows.Count; r++)
+            {
+                var current = selections[r];
+                var usedElsewhere = selections.Where((f, i) => i != r && f != TargetField.None).ToHashSet();
+                var available = MappingFieldOptions.Where(o => o.Field == current || !usedElsewhere.Contains(o.Field)).ToArray();
+
+                var cell = (DataGridViewComboBoxCell)_mappingGrid.Rows[r].Cells["colTarget"];
+                cell.DataSource = available;
+                cell.DisplayMember = "Label";
+                cell.ValueMember = "Field";
+                cell.Value = current;
+            }
+        }
+        finally
+        {
+            _suppressMappingComboRefresh = false;
+        }
+
+        UpdateMappingButtonsEnabled();
+    }
+
+    private void UpdateMappingButtonsEnabled()
+    {
+        _btnTaxRateMapping.Enabled = GetMappedColumnIndex(TargetField.TaxRate) != null;
+        _btnExciseMapping.Enabled = GetMappedColumnIndex(TargetField.Excise) != null;
+    }
+
+    private int? GetMappedColumnIndex(TargetField field)
+    {
+        for (var r = 0; r < _mappingGrid.Rows.Count; r++)
+        {
+            if (_mappingGrid.Rows[r].Cells["colTarget"].Value is TargetField tf && tf == field)
+            {
+                return r;
+            }
+        }
+
+        return null;
     }
 
     /// <param name="useProfileMapping">
@@ -636,6 +717,7 @@ public class MainForm : Form
             _mappingGrid.Rows.Add(ExcelColumnName(c), header, sample, field);
         }
 
+        RefreshMappingComboOptions();
         SetMappingSectionVisible(true);
         ResetPendingImport();
     }
@@ -706,6 +788,137 @@ public class MainForm : Form
         return mapping;
     }
 
+    private void OpenTaxRateMapping()
+    {
+        var layout = TryGetDocumentLayout(showMessages: true);
+        if (layout is null)
+        {
+            return;
+        }
+
+        var columnIndex = GetMappedColumnIndex(TargetField.TaxRate);
+        if (columnIndex is null)
+        {
+            return;
+        }
+
+        if (_vatRates == null || _vatRates.Count == 0)
+        {
+            MessageBox.Show(this, "Сначала подключитесь к базе данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var rawValues = CollectUniqueRawValues(layout.Value.DataRows, columnIndex.Value);
+        if (rawValues.Count == 0)
+        {
+            MessageBox.Show(this, "В сопоставленной колонке нет значений для сопоставления.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var initial = rawValues.Where(v => _taxRateMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _taxRateMapping[v]);
+        using var form = new ValueMappingForm("Сопоставление налоговых групп", "Значение в документе", "Ставка НДС",
+            rawValues, _vatRates!.Cast<object>().ToList(), initial);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        foreach (var raw in rawValues)
+        {
+            if (form.Mapping.TryGetValue(raw, out var value))
+            {
+                _taxRateMapping[raw] = (VatInfo)value;
+            }
+            else
+            {
+                _taxRateMapping.Remove(raw);
+            }
+        }
+
+        ResetPendingImport();
+    }
+
+    private void OpenExciseMapping()
+    {
+        var layout = TryGetDocumentLayout(showMessages: true);
+        if (layout is null)
+        {
+            return;
+        }
+
+        var columnIndex = GetMappedColumnIndex(TargetField.Excise);
+        if (columnIndex is null)
+        {
+            return;
+        }
+
+        var rawValues = CollectUniqueRawValues(layout.Value.DataRows, columnIndex.Value);
+        if (rawValues.Count == 0)
+        {
+            MessageBox.Show(this, "В сопоставленной колонке нет значений для сопоставления.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var options = new object[] { "Да", "Нет" };
+        var initial = rawValues.Where(v => _exciseMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _exciseMapping[v] ? "Да" : "Нет");
+        using var form = new ValueMappingForm("Сопоставление акцизности товара", "Значение в документе", "Подакцизный",
+            rawValues, options, initial);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        foreach (var raw in rawValues)
+        {
+            if (form.Mapping.TryGetValue(raw, out var value))
+            {
+                _exciseMapping[raw] = (string)value == "Да";
+            }
+            else
+            {
+                _exciseMapping.Remove(raw);
+            }
+        }
+
+        ResetPendingImport();
+    }
+
+    private static List<string> CollectUniqueRawValues(List<string[]> dataRows, int columnIndex)
+    {
+        return dataRows
+            .Select(r => columnIndex < r.Length ? r[columnIndex]?.Trim() : null)
+            .Where(v => !string.IsNullOrEmpty(v))
+            .Select(v => v!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(v => v, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    private async Task OpenGroupMappingAsync()
+    {
+        var built = await BuildAndResolveRowsAsync();
+        if (built is null)
+        {
+            return;
+        }
+
+        var (_, rows, _) = built.Value;
+
+        using var form = new ProductGroupMappingForm(rows, _groups!, _groupOverrides);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _groupOverrides.Clear();
+        foreach (var kvp in form.Overrides)
+        {
+            _groupOverrides[kvp.Key] = kvp.Value;
+        }
+
+        ResetPendingImport();
+    }
+
     // ===================== Defaults section =====================
 
     private void BuildDefaultsGroupBox()
@@ -714,7 +927,7 @@ public class MainForm : Form
         _defaultsGroupBox.Controls.Add(_cmbDefaultGroup);
         _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 52, Width = 220, Text = "Единица измерения по умолчанию:" });
         _defaultsGroupBox.Controls.Add(_cmbDefaultUnit);
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 82, Width = 220, Text = "Ставка НДС по умолчанию:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 82, Width = 225, Text = "Налоговая ставка по умолчанию:" });
         _defaultsGroupBox.Controls.Add(_cmbDefaultVat);
         _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 113, Width = 220, Text = "Товар весовой:" });
         _weightedPanel.Controls.Add(_rbWeightedYes);
@@ -771,7 +984,7 @@ public class MainForm : Form
         }
 
         if (needs.NeedsVatDefault && defaultVat == null &&
-            !Confirm("Не выбрана ставка НДС по умолчанию. Товары без определённой ставки НДС не будут импортированы. Продолжить?"))
+            !Confirm("Не выбрана налоговая ставка по умолчанию. Товары без определённой ставки не будут импортированы. Продолжить?"))
         {
             return false;
         }
@@ -919,18 +1132,24 @@ public class MainForm : Form
         await PrepareImportAsync();
     }
 
-    private async Task PrepareImportAsync()
+    /// <summary>
+    /// Validates the document/mapping/reference-data preconditions, builds rows, collects defaults and
+    /// fully resolves them (including group auto-creation markers and manual group overrides). Shared by
+    /// the actual import and by "Сопоставление групп товаров" (which only needs the resolved rows to
+    /// show and let the user tweak them, not to commit anything).
+    /// </summary>
+    private async Task<(ImportOrchestrator Orchestrator, List<ImportRow> Rows, string[] HeaderRow)?> BuildAndResolveRowsAsync()
     {
         if (_activeProfile == null)
         {
             MessageBox.Show(this, "Сначала выберите подключение к базе данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            return null;
         }
 
         var layout = TryGetDocumentLayout(showMessages: true);
         if (layout is null)
         {
-            return;
+            return null;
         }
 
         var (headerRow, dataRows, _) = layout.Value;
@@ -939,7 +1158,7 @@ public class MainForm : Form
         var mapping = TryBuildMappingFromGrid();
         if (mapping == null)
         {
-            return;
+            return null;
         }
 
         if (_groups == null || _units == null || _vatRates == null || _existingArticleIds == null || _existingBarcodes == null)
@@ -947,7 +1166,7 @@ public class MainForm : Form
             await RefreshReferenceDataAsync();
             if (_groups == null || _units == null || _vatRates == null || _existingArticleIds == null || _existingBarcodes == null)
             {
-                return;
+                return null;
             }
         }
 
@@ -956,16 +1175,50 @@ public class MainForm : Form
         if (rows.Count == 0)
         {
             MessageBox.Show(this, "Не найдено ни одной строки с данными.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            return null;
         }
 
-        var needs = orchestrator.Analyze(rows, mapping);
+        var needs = orchestrator.Analyze(rows, mapping, _taxRateMapping, _exciseMapping);
         if (!TryCollectDefaults(needs, out var defaultGroup, out var defaultUnit, out var defaultVat, out var defaultWeighted, out var defaultExcise))
+        {
+            return null;
+        }
+
+        orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise, _taxRateMapping, _exciseMapping);
+        ApplyGroupOverrides(rows);
+
+        return (orchestrator, rows, headerRow);
+    }
+
+    /// <summary>Applies manual per-product group choices from "Сопоставление групп товаров", stomping
+    /// whatever the automatic name-match/auto-create resolution produced for that row.</summary>
+    private void ApplyGroupOverrides(List<ImportRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            if (!_groupOverrides.TryGetValue(row.SourceRowNumber, out var group))
+            {
+                continue;
+            }
+
+            row.GroupCode = group.Code;
+            row.PendingNewGroupName = null;
+            if (row.Error == "Не удалось определить группу товара")
+            {
+                row.Error = null;
+            }
+        }
+    }
+
+    private async Task PrepareImportAsync()
+    {
+        var built = await BuildAndResolveRowsAsync();
+        if (built is null)
         {
             return;
         }
 
-        orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise);
+        var (orchestrator, rows, headerRow) = built.Value;
 
         var issueRows = rows.Where(r => r.BarcodeNeedsResolution).ToList();
         if (issueRows.Count > 0)
@@ -1098,5 +1351,16 @@ public class MainForm : Form
         _cmbImportProfile.Enabled = !busy;
         _btnSaveImportProfile.Enabled = !busy;
         _btnDeleteImportProfile.Enabled = !busy;
+        _btnGroupMapping.Enabled = !busy;
+
+        if (busy)
+        {
+            _btnTaxRateMapping.Enabled = false;
+            _btnExciseMapping.Enabled = false;
+        }
+        else
+        {
+            UpdateMappingButtonsEnabled();
+        }
     }
 }

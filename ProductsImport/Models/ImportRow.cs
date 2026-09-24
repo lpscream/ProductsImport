@@ -19,6 +19,11 @@ public class ImportRow
     public long? UnitId { get; set; }
     public long? VatId { get; set; }
     public long? GroupCode { get; set; }
+
+    /// <summary>Set instead of <see cref="GroupCode"/> when the document's group name doesn't exist
+    /// in gru2 yet; a new group is created for it right before the row is inserted.</summary>
+    public string? PendingNewGroupName { get; set; }
+
     public string Uktzed { get; set; } = string.Empty;
 
     /// <summary>Set as soon as the row is known to be unimportable; skips further resolution.</summary>

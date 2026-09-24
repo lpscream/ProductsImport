@@ -23,10 +23,16 @@ public enum TargetField
     /// <summary>Unit of measure -> ass1005 (via cls2).</summary>
     Unit,
 
-    /// <summary>VAT rate -> ass1004 (via nds1).</summary>
+    /// <summary>VAT rate, auto-matched by numeric percentage -> ass1004 (via nds1).</summary>
     Vat,
 
-    /// <summary>Excise (подакцизный), yes/no -> ass1007.</summary>
+    /// <summary>
+    /// Tax rate/label, resolved via an explicit raw-value -> nds1 mapping (see "Сопоставление
+    /// налоговых групп") instead of being auto-matched as a percentage -> ass1004 (via nds1).
+    /// </summary>
+    TaxRate,
+
+    /// <summary>Excise (подакцизный), yes/no -> ass1007 and ass2010.</summary>
     Excise,
 
     /// <summary>УКТЗЕД code -> ass2031. Optional: left empty when not mapped or not filled in.</summary>

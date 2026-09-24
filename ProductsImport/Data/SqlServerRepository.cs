@@ -93,6 +93,23 @@ public class SqlServerRepository
         return result;
     }
 
+    /// <summary>Creates a new top-level group (gru2002 = 1) for a document group name that has no
+    /// match in gru2 yet, and returns its new code.</summary>
+    public long InsertGroup(SqlConnection connection, SqlTransaction transaction, string name)
+    {
+        using var maxCmd = new SqlCommand("SELECT ISNULL(MAX(gru2001), 0) + 1 FROM gru2", connection, transaction);
+        var newCode = Convert.ToInt64(maxCmd.ExecuteScalar());
+
+        using var insertCmd = new SqlCommand(
+            "INSERT INTO gru2 (gru2001, gru2002, gru2003, gru2004, gru2005) VALUES (@code, 1, @code + 100, @name, 0)",
+            connection, transaction);
+        insertCmd.Parameters.AddWithValue("@code", newCode);
+        insertCmd.Parameters.AddWithValue("@name", name);
+        insertCmd.ExecuteNonQuery();
+
+        return newCode;
+    }
+
     public HashSet<string> GetExistingBarcodes(SqlConnection connection)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
@@ -130,11 +147,12 @@ public class SqlServerRepository
             "ass2009, ass2010, ass2011, ass2012, ass2013, ass2014, ass2015, ass2016, ass2017, ass2018, " +
             "ass2019, ass2020, ass2021, ass2022, ass2023, ass2024, ass2025, ass2026, ass2027, ass2028, " +
             "ass2029, ass2030, ass2031, ass2032) " +
-            "VALUES (@id, 0, 0, 0.0, 0.0, 0.0, @name, '', 0.0, 2, 0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, " +
+            "VALUES (@id, 0, 0, 0.0, 0.0, 0.0, @name, '', 0.0, @excise, 0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, " +
             "0.0, 0.0, 0, 0.0, 0, '', '', 1, 0.0, 0, 0.0, 0.0, @uktzed, 0)", connection, transaction))
         {
             cmd.Parameters.AddWithValue("@id", record.ArticleId);
             cmd.Parameters.AddWithValue("@name", record.Name);
+            cmd.Parameters.AddWithValue("@excise", record.Excise ? 1 : 0);
             cmd.Parameters.AddWithValue("@uktzed", record.Uktzed);
             cmd.ExecuteNonQuery();
         }
