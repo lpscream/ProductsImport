@@ -1,3 +1,4 @@
+using ProductsImport.Localization;
 using ProductsImport.Services;
 
 namespace ProductsImport.Forms;
@@ -19,8 +20,8 @@ public class ImportResultForm : Form
         RowHeadersVisible = false
     };
 
-    private readonly Button _btnExport = new() { Width = 200, Text = "Сохранить ошибки в Excel..." };
-    private readonly Button _btnClose = new() { Width = 90, Text = "Закрыть", DialogResult = DialogResult.OK };
+    private readonly Button _btnExport = new() { Width = 200, Text = Strings.T("Result_BtnExport") };
+    private readonly Button _btnClose = new() { Width = 90, Text = Strings.T("Common_Close"), DialogResult = DialogResult.OK };
 
     private readonly ImportSummary _summary;
     private readonly string[]? _headerRow;
@@ -30,16 +31,13 @@ public class ImportResultForm : Form
         _summary = summary;
         _headerRow = headerRow;
 
-        Text = "Результат импорта";
+        Text = Strings.T("Result_Title");
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ClientSize = new Size(450, 355);
         MinimumSize = new Size(350, 300);
 
-        _lblSummary.Text = $"Всего строк: {summary.TotalRows}\r\n" +
-                            $"Успешно импортировано: {summary.Imported}\r\n" +
-                            $"Пропущено пользователем: {summary.Skipped}\r\n" +
-                            $"Не импортировано из-за ошибок: {summary.Errors.Count}";
+        _lblSummary.Text = Strings.T("Result_Summary", summary.TotalRows, summary.Imported, summary.Skipped, summary.Errors.Count);
 
         Controls.Add(_lblSummary);
         Controls.Add(_grid);
@@ -53,8 +51,8 @@ public class ImportResultForm : Form
         _btnClose.Left = ClientSize.Width - 105;
         _btnClose.Top = 320;
 
-        _grid.Columns.Add("colRow", "Строка");
-        _grid.Columns.Add("colMessage", "Ошибка");
+        _grid.Columns.Add("colRow", Strings.T("Common_Row"));
+        _grid.Columns.Add("colMessage", Strings.T("Common_Error"));
         foreach (var error in summary.Errors)
         {
             _grid.Rows.Add(error.SourceRowNumber, error.Message);
@@ -70,7 +68,7 @@ public class ImportResultForm : Form
     {
         using var dialog = new SaveFileDialog
         {
-            Filter = "Книга Excel (*.xlsx)|*.xlsx",
+            Filter = Strings.T("Result_SaveDialogFilter"),
             FileName = "import_errors.xlsx"
         };
 
@@ -82,11 +80,11 @@ public class ImportResultForm : Form
         try
         {
             ErrorReportService.WriteErrors(dialog.FileName, _headerRow, _summary.Errors);
-            MessageBox.Show(this, "Файл с ошибками сохранён.", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, Strings.T("Result_Msg_Saved"), Strings.T("Common_Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Не удалось сохранить файл: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Strings.T("Result_Msg_SaveFailed", ex.Message), Strings.T("Common_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

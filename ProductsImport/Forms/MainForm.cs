@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using ProductsImport.Data;
+using ProductsImport.Localization;
 using ProductsImport.Models;
 using ProductsImport.Services;
 
@@ -14,40 +15,47 @@ public class MainForm : Form
 {
     private sealed record FieldOption(TargetField Field, string Label);
 
-    private static readonly FieldOption[] MappingFieldOptions =
+    private static FieldOption[] BuildMappingFieldOptions() => new[]
     {
-        new(TargetField.None, "— не использовать —"),
-        new(TargetField.Name, "Наименование (обязательно)"),
-        new(TargetField.Barcode, "Штрих-код"),
-        new(TargetField.Group, "Группа"),
-        new(TargetField.Article, "Артикул"),
-        new(TargetField.Weighted, "Весовой (да/нет)"),
-        new(TargetField.Unit, "Единица измерения"),
-        new(TargetField.Vat, "НДС, %"),
-        new(TargetField.TaxRate, "Налоговая ставка"),
-        new(TargetField.Excise, "Подакцизный (да/нет)"),
-        new(TargetField.Uktzed, "УКТЗЕД")
+        new FieldOption(TargetField.None, Strings.T("Field_None")),
+        new FieldOption(TargetField.Name, Strings.T("Field_Name")),
+        new FieldOption(TargetField.Barcode, Strings.T("Field_Barcode")),
+        new FieldOption(TargetField.Group, Strings.T("Field_Group")),
+        new FieldOption(TargetField.Article, Strings.T("Field_Article")),
+        new FieldOption(TargetField.Weighted, Strings.T("Field_Weighted")),
+        new FieldOption(TargetField.Unit, Strings.T("Field_Unit")),
+        new FieldOption(TargetField.TaxRate, Strings.T("Field_TaxRate")),
+        new FieldOption(TargetField.Excise, Strings.T("Field_Excise")),
+        new FieldOption(TargetField.Uktzed, Strings.T("Field_Uktzed"))
     };
 
-    private static readonly string[] BarcodeActionLabels = { "Сгенерировать штрих-код", "Не импортировать", "Ввести вручную" };
+    private static readonly FieldOption[] MappingFieldOptions = BuildMappingFieldOptions();
+
+    private static readonly string[] BarcodeActionLabels =
+    {
+        Strings.T("Barcode_ActionGenerate"),
+        Strings.T("Barcode_ActionSkip"),
+        Strings.T("Barcode_ActionManual")
+    };
 
     // --- Connection ---
-    private readonly Button _btnConnection = new() { Left = 12, Top = 12, Width = 200, Text = "Подключение к базе данных..." };
-    private readonly Label _lblConnection = new() { Left = 220, Top = 17, Width = 660, Text = "Подключение не выбрано" };
+    private readonly Button _btnConnection = new() { Left = 12, Top = 12, Width = 200, Text = Strings.T("Main_BtnConnection") };
+    private readonly Label _lblConnection = new() { Left = 220, Top = 17, Width = 560, Text = Strings.T("Main_LblConnectionNotSelected") };
+    private readonly Button _btnSettings = new() { Left = 790, Top = 12, Width = 82, Text = Strings.T("Main_BtnSettings") };
 
     // --- Document / sheet / header row ---
-    private readonly Button _btnOpenFile = new() { Left = 12, Top = 45, Width = 200, Text = "Открыть документ..." };
-    private readonly Label _lblFile = new() { Left = 220, Top = 50, Width = 650, Text = "Файл не открыт" };
-    private readonly Label _lblSheet = new() { Left = 12, Top = 82, Width = 80, Text = "Лист:" };
+    private readonly Button _btnOpenFile = new() { Left = 12, Top = 45, Width = 200, Text = Strings.T("Main_BtnOpenFile") };
+    private readonly Label _lblFile = new() { Left = 220, Top = 50, Width = 650, Text = Strings.T("Main_LblFileNotOpen") };
+    private readonly Label _lblSheet = new() { Left = 12, Top = 82, Width = 80, Text = Strings.T("Main_LblSheet") };
     private readonly ComboBox _cmbSheets = new() { Left = 95, Top = 78, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Label _lblHeaderRow = new() { Left = 310, Top = 82, Width = 150, Text = "Строка с заголовками:" };
+    private readonly Label _lblHeaderRow = new() { Left = 310, Top = 82, Width = 150, Text = Strings.T("Main_LblHeaderRow") };
     private readonly NumericUpDown _numHeaderRow = new() { Left = 460, Top = 78, Width = 60, Minimum = 1, Maximum = 1, Value = 1 };
 
     // --- Import profile ---
-    private readonly Label _lblImportProfile = new() { Left = 12, Top = 116, Width = 90, Text = "Профиль импорта:" };
+    private readonly Label _lblImportProfile = new() { Left = 12, Top = 116, Width = 90, Text = Strings.T("Main_LblImportProfile") };
     private readonly ComboBox _cmbImportProfile = new() { Left = 105, Top = 112, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _btnSaveImportProfile = new() { Left = 333, Top = 111, Width = 190, Text = "Сохранить как профиль..." };
-    private readonly Button _btnDeleteImportProfile = new() { Left = 529, Top = 111, Width = 140, Text = "Удалить профиль" };
+    private readonly Button _btnSaveImportProfile = new() { Left = 333, Top = 111, Width = 190, Text = Strings.T("Main_BtnSaveImportProfile") };
+    private readonly Button _btnDeleteImportProfile = new() { Left = 529, Top = 111, Width = 140, Text = Strings.T("Main_BtnDeleteImportProfile") };
 
     // --- Document preview (click a row to set the header row) ---
     private readonly DataGridView _grid = new()
@@ -69,7 +77,7 @@ public class MainForm : Form
         Width = 860,
         Height = 292,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        Text = "Сопоставление колонок",
+        Text = Strings.T("Main_MappingGroupTitle"),
         Visible = false
     };
 
@@ -87,11 +95,13 @@ public class MainForm : Form
         SelectionMode = DataGridViewSelectionMode.CellSelect
     };
 
-    private readonly Button _btnGroupMapping = new() { Left = 10, Top = 220, Width = 260, Text = "Сопоставление групп товаров" };
-    private readonly Button _btnTaxRateMapping = new() { Left = 280, Top = 220, Width = 260, Text = "Сопоставление налоговых групп", Enabled = false };
-    private readonly Button _btnExciseMapping = new() { Left = 550, Top = 220, Width = 260, Text = "Сопоставление акцизности товара", Enabled = false };
+    private readonly Button _btnGroupMapping = new() { Left = 10, Top = 220, Width = 205, Text = Strings.T("Main_BtnGroupMapping") };
+    private readonly Button _btnUnitMapping = new() { Left = 220, Top = 220, Width = 205, Text = Strings.T("Main_BtnUnitMapping"), Enabled = false };
+    private readonly Button _btnTaxRateMapping = new() { Left = 430, Top = 220, Width = 205, Text = Strings.T("Main_BtnTaxRateMapping"), Enabled = false };
+    private readonly Button _btnExciseMapping = new() { Left = 640, Top = 220, Width = 205, Text = Strings.T("Main_BtnExciseMapping"), Enabled = false };
 
     private bool _suppressMappingComboRefresh;
+    private readonly Dictionary<string, UnitInfo> _unitMapping = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, VatInfo> _taxRateMapping = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _exciseMapping = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, GroupInfo> _groupOverrides = new();
@@ -103,7 +113,7 @@ public class MainForm : Form
         Width = 860,
         Height = 180,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        Text = "Значения по умолчанию",
+        Text = Strings.T("Main_DefaultsGroupTitle"),
         Visible = false
     };
 
@@ -114,11 +124,11 @@ public class MainForm : Form
     // Each pair needs its own container: WinForms groups RadioButtons by immediate parent, so
     // without separate panels these four would all belong to one group (only one could be checked).
     private readonly Panel _weightedPanel = new() { Left = 235, Top = 108, Width = 200, Height = 24 };
-    private readonly RadioButton _rbWeightedYes = new() { Left = 0, Top = 0, Width = 60, Text = "Да", AutoSize = true };
-    private readonly RadioButton _rbWeightedNo = new() { Left = 65, Top = 0, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
+    private readonly RadioButton _rbWeightedYes = new() { Left = 0, Top = 0, Width = 60, Text = Strings.T("Common_Yes"), AutoSize = true };
+    private readonly RadioButton _rbWeightedNo = new() { Left = 65, Top = 0, Width = 60, Text = Strings.T("Common_No"), AutoSize = true, Checked = true };
     private readonly Panel _excisePanel = new() { Left = 235, Top = 138, Width = 200, Height = 24 };
-    private readonly RadioButton _rbExciseYes = new() { Left = 0, Top = 0, Width = 60, Text = "Да", AutoSize = true };
-    private readonly RadioButton _rbExciseNo = new() { Left = 65, Top = 0, Width = 60, Text = "Нет", AutoSize = true, Checked = true };
+    private readonly RadioButton _rbExciseYes = new() { Left = 0, Top = 0, Width = 60, Text = Strings.T("Common_Yes"), AutoSize = true };
+    private readonly RadioButton _rbExciseNo = new() { Left = 65, Top = 0, Width = 60, Text = Strings.T("Common_No"), AutoSize = true, Checked = true };
 
     // --- Barcode resolution section ---
     private readonly GroupBox _barcodeGroupBox = new()
@@ -127,12 +137,12 @@ public class MainForm : Form
         Width = 860,
         Height = 300,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        Text = "Требуется решение по штрих-коду",
+        Text = Strings.T("Main_BarcodeGroupTitle"),
         Visible = false
     };
 
     private readonly ComboBox _cmbBarcodeApplyAll = new() { Left = 165, Top = 20, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _btnBarcodeApplyAll = new() { Left = 395, Top = 19, Width = 160, Text = "Применить ко всем" };
+    private readonly Button _btnBarcodeApplyAll = new() { Left = 395, Top = 19, Width = 160, Text = Strings.T("Main_BtnApplyToAll") };
 
     private readonly DataGridView _barcodeGrid = new()
     {
@@ -151,12 +161,13 @@ public class MainForm : Form
     private readonly Dictionary<ImportRow, string> _barcodeManualValues = new();
     private List<ImportRow>? _barcodeIssueRows;
 
-    private readonly Button _btnStartImport = new() { Width = 220, Height = 32, Text = "Начать импорт..." };
+    private readonly Button _btnStartImport = new() { Width = 220, Height = 32, Text = Strings.T("Main_BtnStartImport") };
 
     private ConnectionProfile? _activeProfile;
     private SpreadsheetDocument? _document;
     private List<ImportProfile> _importProfiles;
     private bool _suppressMappingRefresh;
+    private Language _language = Language.Russian;
 
     private List<GroupInfo>? _groups;
     private List<UnitInfo>? _units;
@@ -170,7 +181,7 @@ public class MainForm : Form
 
     public MainForm()
     {
-        Text = "Импорт товаров в справочник";
+        Text = Strings.T("Main_Title");
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(900, 700);
         MinimumSize = new Size(760, 500);
@@ -178,6 +189,7 @@ public class MainForm : Form
 
         Controls.Add(_btnConnection);
         Controls.Add(_lblConnection);
+        Controls.Add(_btnSettings);
         Controls.Add(_btnOpenFile);
         Controls.Add(_lblFile);
         Controls.Add(_lblSheet);
@@ -204,6 +216,7 @@ public class MainForm : Form
         RelayoutSections();
 
         _btnConnection.Click += async (_, _) => await ChooseConnectionAsync();
+        _btnSettings.Click += (_, _) => OpenSettings();
         _btnOpenFile.Click += (_, _) => OpenDocument();
         _cmbSheets.SelectedIndexChanged += (_, _) => LoadSheetIntoGrid();
         _grid.CellClick += (_, e) =>
@@ -230,6 +243,7 @@ public class MainForm : Form
         _btnSaveImportProfile.Click += (_, _) => SaveCurrentAsImportProfile();
         _btnDeleteImportProfile.Click += (_, _) => DeleteSelectedImportProfile();
         _btnGroupMapping.Click += async (_, _) => await OpenGroupMappingAsync();
+        _btnUnitMapping.Click += (_, _) => OpenUnitMapping();
         _btnTaxRateMapping.Click += (_, _) => OpenTaxRateMapping();
         _btnExciseMapping.Click += (_, _) => OpenExciseMapping();
         _btnStartImport.Click += async (_, _) => await StartImportAsync();
@@ -259,9 +273,25 @@ public class MainForm : Form
         }
     }
 
+    private void OpenSettings()
+    {
+        using var form = new SettingsForm(_language);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        if (form.SelectedLanguage != _language)
+        {
+            _language = form.SelectedLanguage;
+            PersistLastUsedSettings();
+        }
+    }
+
     private void ApplyLastUsedSettings()
     {
         var settings = AppSettingsStore.Load();
+        _language = settings.Language;
 
         if (settings.LastConnectionName != null)
         {
@@ -291,7 +321,8 @@ public class MainForm : Form
         {
             LastConnectionName = _activeProfile?.Name,
             LastConnectionServer = _activeProfile?.Server,
-            LastImportProfileName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name
+            LastImportProfileName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name,
+            Language = _language
         });
     }
 
@@ -327,7 +358,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Не удалось получить справочные данные из базы: " + ex.Message, "Ошибка",
+            MessageBox.Show(this, Strings.T("Main_Msg_RefDataFailed", ex.Message), Strings.T("Common_Error"),
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             SetDefaultsSectionVisible(false);
         }
@@ -343,7 +374,7 @@ public class MainForm : Form
     {
         using var dialog = new OpenFileDialog
         {
-            Filter = "Документы Excel/CSV (*.xlsx;*.xls;*.csv)|*.xlsx;*.xls;*.csv|Все файлы (*.*)|*.*"
+            Filter = Strings.T("Main_OpenFileFilter")
         };
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -369,7 +400,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Не удалось открыть файл: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Strings.T("Main_Msg_OpenFileFailed", ex.Message), Strings.T("Common_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             _document = null;
         }
         finally
@@ -458,7 +489,7 @@ public class MainForm : Form
         {
             if (showMessages)
             {
-                MessageBox.Show(this, "Сначала откройте документ с товарами.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, Strings.T("Main_Msg_OpenDocumentFirst"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             return null;
@@ -470,7 +501,7 @@ public class MainForm : Form
         {
             if (showMessages)
             {
-                MessageBox.Show(this, "Некорректно указана строка с заголовками.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, Strings.T("Main_Msg_InvalidHeaderRow"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             return null;
@@ -482,7 +513,7 @@ public class MainForm : Form
         {
             if (showMessages)
             {
-                MessageBox.Show(this, "После указанной строки заголовков нет данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, Strings.T("Main_Msg_NoDataAfterHeader"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             return null;
@@ -497,7 +528,7 @@ public class MainForm : Form
     private void RefreshImportProfileList(string? selectName)
     {
         _cmbImportProfile.Items.Clear();
-        _cmbImportProfile.Items.Add("— не выбран —");
+        _cmbImportProfile.Items.Add(Strings.T("Main_ImportProfileNone"));
         foreach (var profile in _importProfiles.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             _cmbImportProfile.Items.Add(profile);
@@ -523,7 +554,7 @@ public class MainForm : Form
         }
 
         var currentName = (_cmbImportProfile.SelectedItem as ImportProfile)?.Name ?? string.Empty;
-        using var prompt = new TextPromptForm("Сохранить профиль", "Название профиля импорта:", currentName);
+        using var prompt = new TextPromptForm(Strings.T("Main_SaveProfileTitle"), Strings.T("Main_SaveProfilePrompt"), currentName);
         if (prompt.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -533,8 +564,8 @@ public class MainForm : Form
         var existing = _importProfiles.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.CurrentCultureIgnoreCase));
         if (existing != null)
         {
-            var overwrite = MessageBox.Show(this, $"Профиль \"{name}\" уже существует. Заменить его?",
-                "Подтверждение", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var overwrite = MessageBox.Show(this, Strings.T("Main_Msg_ProfileExistsConfirm", name),
+                Strings.T("Common_Confirmation"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (overwrite != DialogResult.Yes)
             {
                 return;
@@ -557,18 +588,18 @@ public class MainForm : Form
 
         ImportProfileStore.Save(_importProfiles);
         RefreshImportProfileList(name);
-        MessageBox.Show(this, "Профиль сохранён.", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(this, Strings.T("Main_Msg_ProfileSaved"), Strings.T("Common_Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void DeleteSelectedImportProfile()
     {
         if (_cmbImportProfile.SelectedItem is not ImportProfile profile)
         {
-            MessageBox.Show(this, "Выберите профиль из списка.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("Main_Msg_SelectProfileFromList"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        if (MessageBox.Show(this, $"Удалить профиль \"{profile.Name}\"?", "Подтверждение",
+        if (MessageBox.Show(this, Strings.T("Main_Msg_DeleteProfileConfirm", profile.Name), Strings.T("Common_Confirmation"),
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;
@@ -585,6 +616,7 @@ public class MainForm : Form
     {
         _mappingGroupBox.Controls.Add(_mappingGrid);
         _mappingGroupBox.Controls.Add(_btnGroupMapping);
+        _mappingGroupBox.Controls.Add(_btnUnitMapping);
         _mappingGroupBox.Controls.Add(_btnTaxRateMapping);
         _mappingGroupBox.Controls.Add(_btnExciseMapping);
         _mappingGroupBox.Controls.Add(new Label
@@ -594,17 +626,16 @@ public class MainForm : Form
             Width = 838,
             Height = 34,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-            Text = "Наименование и штрих-код являются основными колонками. Остальные характеристики можно " +
-                   "не сопоставлять — для них ниже можно указать значение по умолчанию."
+            Text = Strings.T("Main_MappingHint")
         });
 
-        _mappingGrid.Columns.Add("colIndex", "Колонка");
-        _mappingGrid.Columns.Add("colHeader", "Заголовок в документе");
-        _mappingGrid.Columns.Add("colSample", "Пример значения");
+        _mappingGrid.Columns.Add("colIndex", Strings.T("Main_Grid_ColIndex"));
+        _mappingGrid.Columns.Add("colHeader", Strings.T("Main_Grid_ColHeader"));
+        _mappingGrid.Columns.Add("colSample", Strings.T("Main_Grid_ColSample"));
         _mappingGrid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "colTarget",
-            HeaderText = "Назначение",
+            HeaderText = Strings.T("Main_Grid_ColTarget"),
             DataSource = MappingFieldOptions,
             DisplayMember = "Label",
             ValueMember = "Field",
@@ -669,6 +700,7 @@ public class MainForm : Form
 
     private void UpdateMappingButtonsEnabled()
     {
+        _btnUnitMapping.Enabled = GetMappedColumnIndex(TargetField.Unit) != null;
         _btnTaxRateMapping.Enabled = GetMappedColumnIndex(TargetField.TaxRate) != null;
         _btnExciseMapping.Enabled = GetMappedColumnIndex(TargetField.Excise) != null;
     }
@@ -756,9 +788,9 @@ public class MainForm : Form
             if (used.TryGetValue(field, out var firstRow))
             {
                 MessageBox.Show(this,
-                    $"Поле \"{MappingFieldOptions.First(o => o.Field == field).Label}\" сопоставлено сразу нескольким колонкам " +
-                    $"({ExcelColumnName(firstRow)} и {ExcelColumnName(r)}). Каждое поле можно сопоставить только один раз.",
-                    "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Strings.T("Main_Msg_FieldMappedTwice", MappingFieldOptions.First(o => o.Field == field).Label,
+                        ExcelColumnName(firstRow), ExcelColumnName(r)),
+                    Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return null;
             }
 
@@ -768,7 +800,7 @@ public class MainForm : Form
 
         if (!used.ContainsKey(TargetField.Name))
         {
-            MessageBox.Show(this, "Необходимо сопоставить колонку с наименованием товара.", "Проверка",
+            MessageBox.Show(this, Strings.T("Main_Msg_NameNotMapped"), Strings.T("Common_Warning"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
@@ -776,9 +808,8 @@ public class MainForm : Form
         if (!used.ContainsKey(TargetField.Barcode))
         {
             var proceed = MessageBox.Show(this,
-                "Колонка со штрих-кодом не указана. Штрих-код нужно будет сгенерировать, ввести вручную " +
-                "или пропустить для каждого товара. Продолжить?",
-                "Штрих-код не сопоставлен", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                Strings.T("Main_Msg_BarcodeNotMappedConfirm"),
+                Strings.T("Main_Title_BarcodeNotMapped"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (proceed != DialogResult.Yes)
             {
                 return null;
@@ -786,6 +817,56 @@ public class MainForm : Form
         }
 
         return mapping;
+    }
+
+    private void OpenUnitMapping()
+    {
+        var layout = TryGetDocumentLayout(showMessages: true);
+        if (layout is null)
+        {
+            return;
+        }
+
+        var columnIndex = GetMappedColumnIndex(TargetField.Unit);
+        if (columnIndex is null)
+        {
+            return;
+        }
+
+        if (_units == null || _units.Count == 0)
+        {
+            MessageBox.Show(this, Strings.T("Main_Msg_ConnectFirst"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var rawValues = CollectUniqueRawValues(layout.Value.DataRows, columnIndex.Value);
+        if (rawValues.Count == 0)
+        {
+            MessageBox.Show(this, Strings.T("Main_Msg_NoValuesToMap"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var initial = rawValues.Where(v => _unitMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _unitMapping[v]);
+        using var form = new ValueMappingForm(Strings.T("Main_BtnUnitMapping"), Strings.T("Common_ValueInDocument"), Strings.T("Field_Unit"),
+            rawValues, _units!.Cast<object>().ToList(), initial);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        foreach (var raw in rawValues)
+        {
+            if (form.Mapping.TryGetValue(raw, out var value))
+            {
+                _unitMapping[raw] = (UnitInfo)value;
+            }
+            else
+            {
+                _unitMapping.Remove(raw);
+            }
+        }
+
+        ResetPendingImport();
     }
 
     private void OpenTaxRateMapping()
@@ -804,19 +885,19 @@ public class MainForm : Form
 
         if (_vatRates == null || _vatRates.Count == 0)
         {
-            MessageBox.Show(this, "Сначала подключитесь к базе данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("Main_Msg_ConnectFirst"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var rawValues = CollectUniqueRawValues(layout.Value.DataRows, columnIndex.Value);
         if (rawValues.Count == 0)
         {
-            MessageBox.Show(this, "В сопоставленной колонке нет значений для сопоставления.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, Strings.T("Main_Msg_NoValuesToMap"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
         var initial = rawValues.Where(v => _taxRateMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _taxRateMapping[v]);
-        using var form = new ValueMappingForm("Сопоставление налоговых групп", "Значение в документе", "Ставка НДС",
+        using var form = new ValueMappingForm(Strings.T("Main_BtnTaxRateMapping"), Strings.T("Common_ValueInDocument"), Strings.T("ValueMap_ColVatHeader"),
             rawValues, _vatRates!.Cast<object>().ToList(), initial);
         if (form.ShowDialog(this) != DialogResult.OK)
         {
@@ -855,13 +936,15 @@ public class MainForm : Form
         var rawValues = CollectUniqueRawValues(layout.Value.DataRows, columnIndex.Value);
         if (rawValues.Count == 0)
         {
-            MessageBox.Show(this, "В сопоставленной колонке нет значений для сопоставления.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, Strings.T("Main_Msg_NoValuesToMap"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        var options = new object[] { "Да", "Нет" };
-        var initial = rawValues.Where(v => _exciseMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _exciseMapping[v] ? "Да" : "Нет");
-        using var form = new ValueMappingForm("Сопоставление акцизности товара", "Значение в документе", "Подакцизный",
+        var yes = Strings.T("Common_Yes");
+        var no = Strings.T("Common_No");
+        var options = new object[] { yes, no };
+        var initial = rawValues.Where(v => _exciseMapping.ContainsKey(v)).ToDictionary(v => v, object (v) => _exciseMapping[v] ? yes : no);
+        using var form = new ValueMappingForm(Strings.T("Main_BtnExciseMapping"), Strings.T("Common_ValueInDocument"), Strings.T("ValueMap_ColExciseHeader"),
             rawValues, options, initial);
         if (form.ShowDialog(this) != DialogResult.OK)
         {
@@ -872,7 +955,7 @@ public class MainForm : Form
         {
             if (form.Mapping.TryGetValue(raw, out var value))
             {
-                _exciseMapping[raw] = (string)value == "Да";
+                _exciseMapping[raw] = (string)value == yes;
             }
             else
             {
@@ -923,17 +1006,17 @@ public class MainForm : Form
 
     private void BuildDefaultsGroupBox()
     {
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 22, Width = 220, Text = "Группа товаров по умолчанию:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 22, Width = 220, Text = Strings.T("Main_LblDefaultGroup") });
         _defaultsGroupBox.Controls.Add(_cmbDefaultGroup);
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 52, Width = 220, Text = "Единица измерения по умолчанию:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 52, Width = 220, Text = Strings.T("Main_LblDefaultUnit") });
         _defaultsGroupBox.Controls.Add(_cmbDefaultUnit);
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 82, Width = 225, Text = "Налоговая ставка по умолчанию:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 82, Width = 225, Text = Strings.T("Main_LblDefaultVat") });
         _defaultsGroupBox.Controls.Add(_cmbDefaultVat);
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 113, Width = 220, Text = "Товар весовой:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 113, Width = 220, Text = Strings.T("Main_LblWeighted") });
         _weightedPanel.Controls.Add(_rbWeightedYes);
         _weightedPanel.Controls.Add(_rbWeightedNo);
         _defaultsGroupBox.Controls.Add(_weightedPanel);
-        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 143, Width = 220, Text = "Товар подакцизный:" });
+        _defaultsGroupBox.Controls.Add(new Label { Left = 10, Top = 143, Width = 220, Text = Strings.T("Main_LblExcise") });
         _excisePanel.Controls.Add(_rbExciseYes);
         _excisePanel.Controls.Add(_rbExciseNo);
         _defaultsGroupBox.Controls.Add(_excisePanel);
@@ -972,19 +1055,19 @@ public class MainForm : Form
         defaultExcise = _rbExciseYes.Checked;
 
         if (needs.NeedsGroupDefault && defaultGroup == null &&
-            !Confirm("Не выбрана группа по умолчанию. Товары без определённой группы не будут импортированы. Продолжить?"))
+            !Confirm(Strings.T("Main_Msg_NoDefaultGroupConfirm")))
         {
             return false;
         }
 
         if (needs.NeedsUnitDefault && defaultUnit == null &&
-            !Confirm("Не выбрана единица измерения по умолчанию. Товары без определённой единицы измерения не будут импортированы. Продолжить?"))
+            !Confirm(Strings.T("Main_Msg_NoDefaultUnitConfirm")))
         {
             return false;
         }
 
         if (needs.NeedsVatDefault && defaultVat == null &&
-            !Confirm("Не выбрана налоговая ставка по умолчанию. Товары без определённой ставки не будут импортированы. Продолжить?"))
+            !Confirm(Strings.T("Main_Msg_NoDefaultVatConfirm")))
         {
             return false;
         }
@@ -993,13 +1076,13 @@ public class MainForm : Form
     }
 
     private bool Confirm(string message) =>
-        MessageBox.Show(this, message, "Проверка", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+        MessageBox.Show(this, message, Strings.T("Common_Warning"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
 
     // ===================== Barcode resolution section =====================
 
     private void BuildBarcodeGroupBox()
     {
-        _barcodeGroupBox.Controls.Add(new Label { Left = 10, Top = 24, Width = 150, Text = "Для выделенных строк:" });
+        _barcodeGroupBox.Controls.Add(new Label { Left = 10, Top = 24, Width = 150, Text = Strings.T("Main_LblForSelectedRows") });
         _barcodeGroupBox.Controls.Add(_cmbBarcodeApplyAll);
         _barcodeGroupBox.Controls.Add(_btnBarcodeApplyAll);
         _barcodeGroupBox.Controls.Add(_barcodeGrid);
@@ -1008,17 +1091,17 @@ public class MainForm : Form
         _cmbBarcodeApplyAll.SelectedIndex = 0;
         _btnBarcodeApplyAll.Click += (_, _) => ApplyBarcodeActionToAllRows();
 
-        _barcodeGrid.Columns.Add("colRow", "Строка");
-        _barcodeGrid.Columns.Add("colName", "Наименование");
-        _barcodeGrid.Columns.Add("colRaw", "Штрих-код в документе");
+        _barcodeGrid.Columns.Add("colRow", Strings.T("Common_Row"));
+        _barcodeGrid.Columns.Add("colName", Strings.T("Common_Name"));
+        _barcodeGrid.Columns.Add("colRaw", Strings.T("Main_Grid_ColBarcodeRaw"));
         _barcodeGrid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "colAction",
-            HeaderText = "Действие",
+            HeaderText = Strings.T("Main_Grid_ColAction"),
             DataSource = BarcodeActionLabels.ToList(),
             FlatStyle = FlatStyle.Flat
         });
-        _barcodeGrid.Columns.Add("colManual", "Штрих-код вручную");
+        _barcodeGrid.Columns.Add("colManual", Strings.T("Main_Grid_ColManual"));
         _barcodeGrid.Columns.Add(new DataGridViewButtonColumn
         {
             Name = "colPick",
@@ -1043,11 +1126,11 @@ public class MainForm : Form
 
         foreach (var row in issueRows)
         {
-            _barcodeGrid.Rows.Add(row.SourceRowNumber, row.Name ?? "(без наименования)", row.RawBarcode ?? "(нет)",
+            _barcodeGrid.Rows.Add(row.SourceRowNumber, row.Name ?? Strings.T("Common_NoName"), row.RawBarcode ?? Strings.T("Common_NotAvailable"),
                 BarcodeActionLabels[0], string.Empty, "...");
         }
 
-        _barcodeGroupBox.Text = $"Требуется решение по штрих-коду ({issueRows.Count})";
+        _barcodeGroupBox.Text = Strings.T("Main_BarcodeGroupTitleCount", issueRows.Count);
     }
 
     private void BarcodeGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
@@ -1102,16 +1185,16 @@ public class MainForm : Form
 
             if (action == BarcodeAction.Manual && string.IsNullOrWhiteSpace(manualValue))
             {
-                MessageBox.Show(this, $"Строка {row.SourceRowNumber}: не введён штрих-код. Нажмите \"...\", чтобы ввести его.",
-                    "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, Strings.T("Main_Msg_BarcodeNotEnteredRow", row.SourceRowNumber),
+                    Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
             if (!orchestrator.ApplyBarcodeResolution(row, action, manualValue))
             {
                 MessageBox.Show(this,
-                    $"Строка {row.SourceRowNumber}: указанный штрих-код уже используется другим товаром. Введите другой.",
-                    "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Strings.T("Main_Msg_BarcodeAlreadyUsedRow", row.SourceRowNumber),
+                    Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
         }
@@ -1142,7 +1225,7 @@ public class MainForm : Form
     {
         if (_activeProfile == null)
         {
-            MessageBox.Show(this, "Сначала выберите подключение к базе данных.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("Main_Msg_ChooseConnectionFirst"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
 
@@ -1174,17 +1257,17 @@ public class MainForm : Form
         var rows = orchestrator.BuildRows(dataRows, headerRowIndex + 2);
         if (rows.Count == 0)
         {
-            MessageBox.Show(this, "Не найдено ни одной строки с данными.", "Проверка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, Strings.T("Main_Msg_NoDataRows"), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
 
-        var needs = orchestrator.Analyze(rows, mapping, _taxRateMapping, _exciseMapping);
+        var needs = orchestrator.Analyze(rows, mapping, _unitMapping, _taxRateMapping, _exciseMapping);
         if (!TryCollectDefaults(needs, out var defaultGroup, out var defaultUnit, out var defaultVat, out var defaultWeighted, out var defaultExcise))
         {
             return null;
         }
 
-        orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise, _taxRateMapping, _exciseMapping);
+        orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise, _unitMapping, _taxRateMapping, _exciseMapping);
         ApplyGroupOverrides(rows);
 
         return (orchestrator, rows, headerRow);
@@ -1203,7 +1286,7 @@ public class MainForm : Form
 
             row.GroupCode = group.Code;
             row.PendingNewGroupName = null;
-            if (row.Error == "Не удалось определить группу товара")
+            if (row.Error == Strings.T("Err_NoGroup"))
             {
                 row.Error = null;
             }
@@ -1228,7 +1311,7 @@ public class MainForm : Form
             _pendingRows = rows;
             _pendingOrchestrator = orchestrator;
             _pendingHeaderRow = headerRow;
-            _btnStartImport.Text = "Импортировать";
+            _btnStartImport.Text = Strings.T("Main_BtnCommitImport");
             return;
         }
 
@@ -1277,7 +1360,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Ошибка импорта: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Strings.T("Main_Msg_ImportError", ex.Message), Strings.T("Common_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
@@ -1293,7 +1376,7 @@ public class MainForm : Form
         _pendingHeaderRow = null;
         _barcodeIssueRows = null;
         SetBarcodeSectionVisible(false);
-        _btnStartImport.Text = "Начать импорт...";
+        _btnStartImport.Text = Strings.T("Main_BtnStartImport");
     }
 
     // ===================== Layout =====================
@@ -1347,6 +1430,7 @@ public class MainForm : Form
         Cursor = busy ? Cursors.WaitCursor : Cursors.Default;
         _btnStartImport.Enabled = !busy;
         _btnConnection.Enabled = !busy;
+        _btnSettings.Enabled = !busy;
         _btnOpenFile.Enabled = !busy;
         _cmbImportProfile.Enabled = !busy;
         _btnSaveImportProfile.Enabled = !busy;
@@ -1355,6 +1439,7 @@ public class MainForm : Form
 
         if (busy)
         {
+            _btnUnitMapping.Enabled = false;
             _btnTaxRateMapping.Enabled = false;
             _btnExciseMapping.Enabled = false;
         }
