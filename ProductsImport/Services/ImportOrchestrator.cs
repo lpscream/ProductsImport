@@ -76,30 +76,32 @@ public class ImportOrchestrator
         return rows;
     }
 
-    public NeedsAnalysis Analyze(List<ImportRow> rows, ColumnMapping mapping)
+    public NeedsAnalysis Analyze(
+        List<ImportRow> rows,
+        ColumnMapping mapping,
+        IReadOnlyDictionary<string, VatInfo>? taxRateMapping = null,
+        IReadOnlyDictionary<string, bool>? exciseMapping = null)
     {
         var analysis = new NeedsAnalysis();
-        var groupMapped = mapping.IsMapped(TargetField.Group);
         var unitMapped = mapping.IsMapped(TargetField.Unit);
-        var vatMapped = mapping.IsMapped(TargetField.Vat);
+        var taxRateMapped = mapping.IsMapped(TargetField.TaxRate);
+        var vatMapped = taxRateMapped || mapping.IsMapped(TargetField.Vat);
         var weightedMapped = mapping.IsMapped(TargetField.Weighted);
-        var exciseMapped = mapping.IsMapped(TargetField.Excise);
+        var exciseColumnMapped = mapping.IsMapped(TargetField.Excise);
 
-        analysis.NeedsGroupDefault = !groupMapped;
+        // A mapped group column always resolves (existing match, or a new group gets created), so it
+        // only needs a default for genuinely blank cells - same condition as "not mapped at all".
+        analysis.NeedsGroupDefault = false;
         analysis.NeedsUnitDefault = !unitMapped;
         analysis.NeedsVatDefault = !vatMapped;
         analysis.NeedsWeightedDefault = !weightedMapped;
-        analysis.NeedsExciseDefault = !exciseMapped;
+        analysis.NeedsExciseDefault = !exciseColumnMapped;
 
         foreach (var row in rows)
         {
-            if (groupMapped && !analysis.NeedsGroupDefault)
+            if (!analysis.NeedsGroupDefault && mapping.GetValue(row.RawValues, TargetField.Group) == null)
             {
-                var raw = mapping.GetValue(row.RawValues, TargetField.Group);
-                if (raw == null || MatchGroup(raw) == null)
-                {
-                    analysis.NeedsGroupDefault = true;
-                }
+                analysis.NeedsGroupDefault = true;
             }
 
             if (unitMapped && !analysis.NeedsUnitDefault)
@@ -113,10 +115,21 @@ public class ImportOrchestrator
 
             if (vatMapped && !analysis.NeedsVatDefault)
             {
-                var raw = mapping.GetValue(row.RawValues, TargetField.Vat);
-                if (raw == null || MatchVat(raw) == null)
+                if (taxRateMapped)
                 {
-                    analysis.NeedsVatDefault = true;
+                    var raw = mapping.GetValue(row.RawValues, TargetField.TaxRate);
+                    if (raw == null || taxRateMapping == null || !taxRateMapping.ContainsKey(raw))
+                    {
+                        analysis.NeedsVatDefault = true;
+                    }
+                }
+                else
+                {
+                    var raw = mapping.GetValue(row.RawValues, TargetField.Vat);
+                    if (raw == null || MatchVat(raw) == null)
+                    {
+                        analysis.NeedsVatDefault = true;
+                    }
                 }
             }
 
@@ -129,10 +142,11 @@ public class ImportOrchestrator
                 }
             }
 
-            if (exciseMapped && !analysis.NeedsExciseDefault)
+            if (exciseColumnMapped && !analysis.NeedsExciseDefault)
             {
                 var raw = mapping.GetValue(row.RawValues, TargetField.Excise);
-                if (raw == null || ParseYesNo(raw) == null)
+                var resolvedByMapping = raw != null && exciseMapping != null && exciseMapping.ContainsKey(raw);
+                if (raw == null || (!resolvedByMapping && ParseYesNo(raw) == null))
                 {
                     analysis.NeedsExciseDefault = true;
                 }
@@ -154,7 +168,9 @@ public class ImportOrchestrator
         UnitInfo? defaultUnit,
         VatInfo? defaultVat,
         bool defaultWeighted,
-        bool defaultExcise)
+        bool defaultExcise,
+        IReadOnlyDictionary<string, VatInfo>? taxRateMapping = null,
+        IReadOnlyDictionary<string, bool>? exciseMapping = null)
     {
         foreach (var row in rows)
         {
@@ -162,9 +178,9 @@ public class ImportOrchestrator
             ResolveBarcode(row, mapping);
             ResolveGroup(row, mapping, defaultGroup);
             ResolveUnit(row, mapping, defaultUnit);
-            ResolveVat(row, mapping, defaultVat);
+            ResolveVat(row, mapping, defaultVat, taxRateMapping);
             row.WeightedResolved = ResolveYesNo(row, mapping, TargetField.Weighted, defaultWeighted);
-            row.ExciseResolved = ResolveYesNo(row, mapping, TargetField.Excise, defaultExcise);
+            row.ExciseResolved = ResolveExcise(row, mapping, defaultExcise, exciseMapping);
             row.Uktzed = mapping.GetValue(row.RawValues, TargetField.Uktzed) ?? string.Empty;
         }
 
@@ -237,19 +253,35 @@ public class ImportOrchestrator
         }
     }
 
+    /// <summary>
+    /// A mapped, non-blank cell always resolves: to an existing group by name/code, or - if no group
+    /// with that name exists yet - by flagging <see cref="ImportRow.PendingNewGroupName"/> so
+    /// <see cref="Import"/> creates it right before the row is inserted. Only a blank cell (or an
+    /// unmapped column) falls back to <paramref name="defaultGroup"/>.
+    /// </summary>
     private void ResolveGroup(ImportRow row, ColumnMapping mapping, GroupInfo? defaultGroup)
     {
         var raw = mapping.GetValue(row.RawValues, TargetField.Group);
-        var match = raw != null ? MatchGroup(raw) : null;
-        var group = match ?? defaultGroup;
-
-        if (group == null)
+        if (raw == null)
         {
-            row.Error ??= "Не удалось определить группу товара";
+            if (defaultGroup == null)
+            {
+                row.Error ??= "Не удалось определить группу товара";
+                return;
+            }
+
+            row.GroupCode = defaultGroup.Code;
             return;
         }
 
-        row.GroupCode = group.Code;
+        var match = MatchGroup(raw);
+        if (match != null)
+        {
+            row.GroupCode = match.Code;
+            return;
+        }
+
+        row.PendingNewGroupName = raw;
     }
 
     private void ResolveUnit(ImportRow row, ColumnMapping mapping, UnitInfo? defaultUnit)
@@ -267,11 +299,27 @@ public class ImportOrchestrator
         row.UnitId = unit.Id;
     }
 
-    private void ResolveVat(ImportRow row, ColumnMapping mapping, VatInfo? defaultVat)
+    /// <summary>
+    /// When the "Налоговая ставка" column is mapped, its raw value is resolved exclusively through
+    /// <paramref name="taxRateMapping"/> (set up via "Сопоставление налоговых групп"), falling back to
+    /// <paramref name="defaultVat"/> for blank cells or values with no entry in that mapping - it is
+    /// never auto-matched as a percentage. Otherwise the legacy "НДС, %" column (if mapped) is
+    /// auto-matched by numeric percentage as before.
+    /// </summary>
+    private void ResolveVat(ImportRow row, ColumnMapping mapping, VatInfo? defaultVat, IReadOnlyDictionary<string, VatInfo>? taxRateMapping)
     {
-        var raw = mapping.GetValue(row.RawValues, TargetField.Vat);
-        var match = raw != null ? MatchVat(raw) : null;
-        var vat = match ?? defaultVat;
+        VatInfo? vat;
+        var taxRateRaw = mapping.GetValue(row.RawValues, TargetField.TaxRate);
+        if (taxRateRaw != null)
+        {
+            vat = (taxRateMapping != null && taxRateMapping.TryGetValue(taxRateRaw, out var mapped)) ? mapped : defaultVat;
+        }
+        else
+        {
+            var raw = mapping.GetValue(row.RawValues, TargetField.Vat);
+            var match = raw != null ? MatchVat(raw) : null;
+            vat = match ?? defaultVat;
+        }
 
         if (vat == null)
         {
@@ -288,6 +336,25 @@ public class ImportOrchestrator
         if (raw == null)
         {
             return defaultValue;
+        }
+
+        return ParseYesNo(raw) ?? defaultValue;
+    }
+
+    /// <summary>An explicit entry in <paramref name="exciseMapping"/> (set up via "Сопоставление
+    /// акцизности товара") takes priority over the да/нет/1/0 word-based parsing that
+    /// <see cref="ResolveYesNo"/> uses for "Весовой".</summary>
+    private bool ResolveExcise(ImportRow row, ColumnMapping mapping, bool defaultValue, IReadOnlyDictionary<string, bool>? exciseMapping)
+    {
+        var raw = mapping.GetValue(row.RawValues, TargetField.Excise);
+        if (raw == null)
+        {
+            return defaultValue;
+        }
+
+        if (exciseMapping != null && exciseMapping.TryGetValue(raw, out var mapped))
+        {
+            return mapped;
         }
 
         return ParseYesNo(raw) ?? defaultValue;
@@ -381,8 +448,57 @@ public class ImportOrchestrator
         return null;
     }
 
+    /// <summary>Creates one gru2 row per distinct <see cref="ImportRow.PendingNewGroupName"/>, in its
+    /// own transaction (committed regardless of how individual product rows later fare), and resolves
+    /// every such row's <see cref="ImportRow.GroupCode"/> from the result.</summary>
+    private void CreateMissingGroups(SqlServerRepository repository, SqlConnection connection, List<ImportRow> rows)
+    {
+        var pendingNames = rows
+            .Where(r => r.PendingNewGroupName != null)
+            .Select(r => r.PendingNewGroupName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (pendingNames.Count == 0)
+        {
+            return;
+        }
+
+        var createdCodes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        using (var transaction = connection.BeginTransaction())
+        {
+            try
+            {
+                foreach (var name in pendingNames)
+                {
+                    var code = repository.InsertGroup(connection, transaction, name);
+                    createdCodes[name] = code;
+                    Groups.Add(new GroupInfo { Code = code, Name = name });
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.PendingNewGroupName != null && createdCodes.TryGetValue(row.PendingNewGroupName, out var code))
+            {
+                row.GroupCode = code;
+                row.PendingNewGroupName = null;
+            }
+        }
+    }
+
     public ImportSummary Import(SqlServerRepository repository, SqlConnection connection, List<ImportRow> rows)
     {
+        CreateMissingGroups(repository, connection, rows);
+
         var summary = new ImportSummary { TotalRows = rows.Count };
 
         foreach (var row in rows)
