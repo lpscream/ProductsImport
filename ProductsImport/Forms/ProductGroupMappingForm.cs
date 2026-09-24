@@ -11,6 +11,11 @@ namespace ProductsImport.Forms;
 /// </summary>
 public class ProductGroupMappingForm : Form
 {
+    // See the equivalent comment in ValueMappingForm: DataGridViewComboBoxCell backed by the unbound
+    // Items collection can throw "DataGridViewComboBoxCell value is not valid" when a value is picked
+    // from the dropdown, so bind through DataSource + DisplayMember + ValueMember instead.
+    private sealed record GroupOption(object Value, string Display);
+
     private static readonly object NoOverride = Strings.T("GroupMap_NoOverride");
 
     private readonly ComboBox _cmbApplyGroup = new() { Left = 175, Top = 12, Width = 260, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -76,17 +81,18 @@ public class ProductGroupMappingForm : Form
         _grid.Columns.Add("colName", Strings.T("Common_Name"));
         _grid.Columns.Add("colCurrent", Strings.T("GroupMap_ColCurrent"));
 
-        // Unbound Items, not DataSource: see the comment in ValueMappingForm for why - DataSource without
-        // DisplayMember/ValueMember makes every row display and commit the first item in the list.
-        var groupColumn = new DataGridViewComboBoxColumn
+        var groupOptions = new List<GroupOption> { new(NoOverride, (string)NoOverride) };
+        groupOptions.AddRange(groups.Select(g => new GroupOption(g, g.ToString() ?? string.Empty)));
+
+        _grid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "colGroup",
             HeaderText = Strings.T("GroupMap_ColNew"),
+            DataSource = groupOptions,
+            DisplayMember = "Display",
+            ValueMember = "Value",
             FlatStyle = FlatStyle.Flat
-        };
-        groupColumn.Items.Add(NoOverride);
-        groupColumn.Items.AddRange(groups.Cast<object>().ToArray());
-        _grid.Columns.Add(groupColumn);
+        });
 
         foreach (var row in rows)
         {

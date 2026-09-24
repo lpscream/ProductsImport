@@ -66,14 +66,15 @@ public class SqlServerRepository
     {
         var result = new List<VatInfo>();
         using var command = new SqlCommand(
-            "SELECT nds1001, nds1003 FROM nds1 ORDER BY nds1003", connection);
+            "SELECT nds1001, nds1002, nds1003 FROM nds1 ORDER BY nds1002", connection);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
             result.Add(new VatInfo
             {
                 Id = reader.GetInt64(0),
-                RatePercent = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1)
+                Name = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                RatePercent = reader.IsDBNull(2) ? 0m : reader.GetDecimal(2)
             });
         }
 

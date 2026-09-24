@@ -9,6 +9,14 @@ namespace ProductsImport.Forms;
 /// </summary>
 public class ValueMappingForm : Form
 {
+    // DataGridViewComboBoxCell backed by the unbound Items collection (no DataSource/DisplayMember/
+    // ValueMember) is unreliable for arbitrary objects: committing a selection can throw
+    // "DataGridViewComboBoxCell value is not valid". Binding through DataSource + DisplayMember +
+    // ValueMember - the same pattern MainForm's column-mapping grid already uses successfully - routes
+    // selection through WinForms' actual data-binding machinery instead of its unbound-combo fallback
+    // path, so this wrapper gives every option a uniform (Display, Value) shape to bind to.
+    private sealed record OptionItem(object Value, string Display);
+
     private static readonly object NotSet = Strings.T("Common_NotSelectedValue");
 
     private readonly DataGridView _grid = new()
@@ -56,20 +64,18 @@ public class ValueMappingForm : Form
 
         _grid.Columns.Add("colRaw", rawColumnHeader);
 
-        // Deliberately using the unbound Items collection (not DataSource): a DataGridViewComboBoxColumn
-        // bound via DataSource without DisplayMember/ValueMember renders every row using the *first*
-        // item's text and commits the first item regardless of what was actually picked. Items behaves
-        // like a plain ComboBox - it just calls ToString() per item and stores the object itself as the
-        // cell value, which is exactly what we want for these mixed DB-value lists.
-        var targetColumn = new DataGridViewComboBoxColumn
+        var optionItems = new List<OptionItem> { new(NotSet, (string)NotSet) };
+        optionItems.AddRange(options.Select(o => new OptionItem(o, o.ToString() ?? string.Empty)));
+
+        _grid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "colTarget",
             HeaderText = targetColumnHeader,
+            DataSource = optionItems,
+            DisplayMember = "Display",
+            ValueMember = "Value",
             FlatStyle = FlatStyle.Flat
-        };
-        targetColumn.Items.Add(NotSet);
-        targetColumn.Items.AddRange(options.ToArray());
-        _grid.Columns.Add(targetColumn);
+        });
         _grid.Columns["colRaw"].ReadOnly = true;
 
         foreach (var raw in rawValues)
