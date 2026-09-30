@@ -163,6 +163,12 @@ public static class Strings
         },
         ["Main_Msg_NoDataRows"] = new[] { "Не найдено ни одной строки с данными.", "Не знайдено жодного рядка з даними.", "Nu a fost găsit niciun rând cu date." },
         ["Main_Msg_ImportError"] = new[] { "Ошибка импорта: {0}", "Помилка імпорту: {0}", "Eroare de import: {0}" },
+        ["Main_Msg_ArchiveGeneratedFailed"] = new[]
+        {
+            "Не удалось сохранить список со сгенерированными штрих-кодами: {0}",
+            "Не вдалося зберегти список зі згенерованими штрих-кодами: {0}",
+            "Nu s-a putut salva lista cu codurile de bare generate: {0}"
+        },
 
         ["Main_SaveProfileTitle"] = new[] { "Сохранить профиль", "Зберегти профіль", "Salvează profilul" },
         ["Main_SaveProfilePrompt"] = new[] { "Название профиля импорта:", "Назва профілю імпорту:", "Denumirea profilului de import:" },
@@ -208,17 +214,11 @@ public static class Strings
         ["Result_SaveDialogFilter"] = new[] { "Книга Excel (*.xlsx)|*.xlsx", "Книга Excel (*.xlsx)|*.xlsx", "Registru Excel (*.xlsx)|*.xlsx" },
         ["Result_Msg_Saved"] = new[] { "Файл с ошибками сохранён.", "Файл із помилками збережено.", "Fișierul cu erori a fost salvat." },
         ["Result_Msg_SaveFailed"] = new[] { "Не удалось сохранить файл: {0}", "Не вдалося зберегти файл: {0}", "Nu s-a putut salva fișierul: {0}" },
-        ["Result_BtnExportGenerated"] = new[]
+        ["Result_AutoSaveNote"] = new[]
         {
-            "Сохранить список со сгенерированными штрих-кодами...",
-            "Зберегти список зі згенерованими штрих-кодами...",
-            "Salvează lista cu codurile de bare generate..."
-        },
-        ["Result_Msg_GeneratedSaved"] = new[]
-        {
-            "Файл со сгенерированными штрих-кодами сохранён.",
-            "Файл зі згенерованими штрих-кодами збережено.",
-            "Fișierul cu codurile de bare generate a fost salvat."
+            "\r\n\r\nШтрих-код сгенерирован автоматически для части товаров. Копии документа сохранены:\r\n{0}\r\n{1}",
+            "\r\n\r\nШтрих-код згенеровано автоматично для частини товарів. Копії документа збережено:\r\n{0}\r\n{1}",
+            "\r\n\r\nCodul de bare a fost generat automat pentru unele produse. Copii ale documentului au fost salvate:\r\n{0}\r\n{1}"
         },
 
         // ----- ManualBarcodeForm -----
