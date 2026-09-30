@@ -208,6 +208,18 @@ public static class Strings
         ["Result_SaveDialogFilter"] = new[] { "Книга Excel (*.xlsx)|*.xlsx", "Книга Excel (*.xlsx)|*.xlsx", "Registru Excel (*.xlsx)|*.xlsx" },
         ["Result_Msg_Saved"] = new[] { "Файл с ошибками сохранён.", "Файл із помилками збережено.", "Fișierul cu erori a fost salvat." },
         ["Result_Msg_SaveFailed"] = new[] { "Не удалось сохранить файл: {0}", "Не вдалося зберегти файл: {0}", "Nu s-a putut salva fișierul: {0}" },
+        ["Result_BtnExportGenerated"] = new[]
+        {
+            "Сохранить список со сгенерированными штрих-кодами...",
+            "Зберегти список зі згенерованими штрих-кодами...",
+            "Salvează lista cu codurile de bare generate..."
+        },
+        ["Result_Msg_GeneratedSaved"] = new[]
+        {
+            "Файл со сгенерированными штрих-кодами сохранён.",
+            "Файл зі згенерованими штрих-кодами збережено.",
+            "Fișierul cu codurile de bare generate a fost salvat."
+        },
 
         // ----- ManualBarcodeForm -----
         ["Manual_Title"] = new[] { "Ввод штрих-кода вручную", "Введення штрих-коду вручну", "Introducere manuală a codului de bare" },
@@ -236,6 +248,9 @@ public static class Strings
         ["Err_ArticleTaken"] = new[] { "Артикул {0} уже используется другим товаром", "Артикул {0} уже використовується іншим товаром", "Codul de articol {0} este deja folosit de alt produs" },
         ["Err_BarcodeUnresolved"] = new[] { "Штрих-код не был разрешён перед импортом", "Штрих-код не було визначено перед імпортом", "Codul de bare nu a fost rezolvat înainte de import" },
         ["Err_DbError"] = new[] { "Ошибка базы данных: {0}", "Помилка бази даних: {0}", "Eroare de bază de date: {0}" },
+
+        // ----- GeneratedBarcodeReportService -----
+        ["GeneratedBarcodes_SheetName"] = new[] { "Сгенерированные штрих-коды", "Згенеровані штрих-коди", "Coduri de bare generate" },
 
         // ----- ErrorReportService -----
         ["ErrRep_SheetName"] = new[] { "Ошибки импорта", "Помилки імпорту", "Erori de import" },

@@ -233,6 +233,7 @@ public class ImportOrchestrator
             case BarcodeAction.Generate:
                 row.ResolvedBarcode = BarcodeGenerator.GenerateUniqueEan13(_reservedBarcodes, _random);
                 row.BarcodeNeedsResolution = false;
+                row.BarcodeWasGenerated = true;
                 return true;
 
             case BarcodeAction.Skip:

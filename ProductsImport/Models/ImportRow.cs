@@ -13,6 +13,10 @@ public class ImportRow
     public bool BarcodeNeedsResolution { get; set; }
     public BarcodeAction BarcodeAction { get; set; } = BarcodeAction.Generate;
 
+    /// <summary>True when <see cref="ResolvedBarcode"/> was auto-generated rather than read from the
+    /// document or typed in manually - used to build the "список со сгенерированными штрих-кодами" export.</summary>
+    public bool BarcodeWasGenerated { get; set; }
+
     public long? Article { get; set; }
     public bool WeightedResolved { get; set; }
     public bool ExciseResolved { get; set; }
