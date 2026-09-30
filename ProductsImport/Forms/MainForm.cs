@@ -178,6 +178,8 @@ public class MainForm : Form
     private List<ImportRow>? _pendingRows;
     private ImportOrchestrator? _pendingOrchestrator;
     private string[]? _pendingHeaderRow;
+    private List<string[]>? _pendingOriginalRows;
+    private int? _pendingBarcodeColumnIndex;
 
     public MainForm()
     {
@@ -985,7 +987,7 @@ public class MainForm : Form
             return;
         }
 
-        var (_, rows, _) = built.Value;
+        var (_, rows, _, _, _) = built.Value;
 
         using var form = new ProductGroupMappingForm(rows, _groups!, _groupOverrides);
         if (form.ShowDialog(this) != DialogResult.OK)
@@ -1221,7 +1223,7 @@ public class MainForm : Form
     /// the actual import and by "Сопоставление групп товаров" (which only needs the resolved rows to
     /// show and let the user tweak them, not to commit anything).
     /// </summary>
-    private async Task<(ImportOrchestrator Orchestrator, List<ImportRow> Rows, string[] HeaderRow)?> BuildAndResolveRowsAsync()
+    private async Task<(ImportOrchestrator Orchestrator, List<ImportRow> Rows, string[] HeaderRow, List<string[]> OriginalRows, int? BarcodeColumnIndex)?> BuildAndResolveRowsAsync()
     {
         if (_activeProfile == null)
         {
@@ -1237,6 +1239,7 @@ public class MainForm : Form
 
         var (headerRow, dataRows, _) = layout.Value;
         var headerRowIndex = (int)_numHeaderRow.Value - 1;
+        var originalRows = _document!.GetRows((string)_cmbSheets.SelectedItem!);
 
         var mapping = TryBuildMappingFromGrid();
         if (mapping == null)
@@ -1270,7 +1273,7 @@ public class MainForm : Form
         orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise, _unitMapping, _taxRateMapping, _exciseMapping);
         ApplyGroupOverrides(rows);
 
-        return (orchestrator, rows, headerRow);
+        return (orchestrator, rows, headerRow, originalRows, mapping.GetColumn(TargetField.Barcode));
     }
 
     /// <summary>Applies manual per-product group choices from "Сопоставление групп товаров", stomping
@@ -1301,7 +1304,7 @@ public class MainForm : Form
             return;
         }
 
-        var (orchestrator, rows, headerRow) = built.Value;
+        var (orchestrator, rows, headerRow, originalRows, barcodeColumnIndex) = built.Value;
 
         var issueRows = rows.Where(r => r.BarcodeNeedsResolution).ToList();
         if (issueRows.Count > 0)
@@ -1311,16 +1314,18 @@ public class MainForm : Form
             _pendingRows = rows;
             _pendingOrchestrator = orchestrator;
             _pendingHeaderRow = headerRow;
+            _pendingOriginalRows = originalRows;
+            _pendingBarcodeColumnIndex = barcodeColumnIndex;
             _btnStartImport.Text = Strings.T("Main_BtnCommitImport");
             return;
         }
 
-        await RunImportAsync(orchestrator, rows, headerRow);
+        await RunImportAsync(orchestrator, rows, headerRow, originalRows, barcodeColumnIndex);
     }
 
     private async Task CommitImportAsync()
     {
-        if (_pendingRows == null || _pendingOrchestrator == null || _pendingHeaderRow == null)
+        if (_pendingRows == null || _pendingOrchestrator == null || _pendingHeaderRow == null || _pendingOriginalRows == null)
         {
             return;
         }
@@ -1328,6 +1333,8 @@ public class MainForm : Form
         var rows = _pendingRows;
         var orchestrator = _pendingOrchestrator;
         var headerRow = _pendingHeaderRow;
+        var originalRows = _pendingOriginalRows;
+        var barcodeColumnIndex = _pendingBarcodeColumnIndex;
 
         if (!TryApplyBarcodeSection(orchestrator))
         {
@@ -1336,10 +1343,11 @@ public class MainForm : Form
 
         ResetPendingImport();
 
-        await RunImportAsync(orchestrator, rows, headerRow);
+        await RunImportAsync(orchestrator, rows, headerRow, originalRows, barcodeColumnIndex);
     }
 
-    private async Task RunImportAsync(ImportOrchestrator orchestrator, List<ImportRow> rows, string[] headerRow)
+    private async Task RunImportAsync(ImportOrchestrator orchestrator, List<ImportRow> rows, string[] headerRow,
+        List<string[]> originalRows, int? barcodeColumnIndex)
     {
         SqlConnection? connection = null;
         try
@@ -1351,7 +1359,7 @@ public class MainForm : Form
 
             var summary = await Task.Run(() => orchestrator.Import(repository, connection, rows));
 
-            using var resultForm = new ImportResultForm(summary, headerRow);
+            using var resultForm = new ImportResultForm(summary, headerRow, rows, originalRows, barcodeColumnIndex);
             resultForm.ShowDialog(this);
 
             connection.Dispose();
@@ -1374,6 +1382,8 @@ public class MainForm : Form
         _pendingRows = null;
         _pendingOrchestrator = null;
         _pendingHeaderRow = null;
+        _pendingOriginalRows = null;
+        _pendingBarcodeColumnIndex = null;
         _barcodeIssueRows = null;
         SetBarcodeSectionVisible(false);
         _btnStartImport.Text = Strings.T("Main_BtnStartImport");
