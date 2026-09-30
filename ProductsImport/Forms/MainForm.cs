@@ -179,6 +179,7 @@ public class MainForm : Form
     private ImportOrchestrator? _pendingOrchestrator;
     private string[]? _pendingHeaderRow;
     private List<string[]>? _pendingOriginalRows;
+    private int? _pendingHeaderRowIndex;
     private int? _pendingBarcodeColumnIndex;
 
     public MainForm()
@@ -987,7 +988,7 @@ public class MainForm : Form
             return;
         }
 
-        var (_, rows, _, _, _) = built.Value;
+        var (_, rows, _, _, _, _) = built.Value;
 
         using var form = new ProductGroupMappingForm(rows, _groups!, _groupOverrides);
         if (form.ShowDialog(this) != DialogResult.OK)
@@ -1223,7 +1224,7 @@ public class MainForm : Form
     /// the actual import and by "Сопоставление групп товаров" (which only needs the resolved rows to
     /// show and let the user tweak them, not to commit anything).
     /// </summary>
-    private async Task<(ImportOrchestrator Orchestrator, List<ImportRow> Rows, string[] HeaderRow, List<string[]> OriginalRows, int? BarcodeColumnIndex)?> BuildAndResolveRowsAsync()
+    private async Task<(ImportOrchestrator Orchestrator, List<ImportRow> Rows, string[] HeaderRow, List<string[]> OriginalRows, int HeaderRowIndex, int? BarcodeColumnIndex)?> BuildAndResolveRowsAsync()
     {
         if (_activeProfile == null)
         {
@@ -1273,7 +1274,7 @@ public class MainForm : Form
         orchestrator.Resolve(rows, mapping, defaultGroup, defaultUnit, defaultVat, defaultWeighted, defaultExcise, _unitMapping, _taxRateMapping, _exciseMapping);
         ApplyGroupOverrides(rows);
 
-        return (orchestrator, rows, headerRow, originalRows, mapping.GetColumn(TargetField.Barcode));
+        return (orchestrator, rows, headerRow, originalRows, headerRowIndex, mapping.GetColumn(TargetField.Barcode));
     }
 
     /// <summary>Applies manual per-product group choices from "Сопоставление групп товаров", stomping
@@ -1304,7 +1305,7 @@ public class MainForm : Form
             return;
         }
 
-        var (orchestrator, rows, headerRow, originalRows, barcodeColumnIndex) = built.Value;
+        var (orchestrator, rows, headerRow, originalRows, headerRowIndex, barcodeColumnIndex) = built.Value;
 
         var issueRows = rows.Where(r => r.BarcodeNeedsResolution).ToList();
         if (issueRows.Count > 0)
@@ -1315,17 +1316,19 @@ public class MainForm : Form
             _pendingOrchestrator = orchestrator;
             _pendingHeaderRow = headerRow;
             _pendingOriginalRows = originalRows;
+            _pendingHeaderRowIndex = headerRowIndex;
             _pendingBarcodeColumnIndex = barcodeColumnIndex;
             _btnStartImport.Text = Strings.T("Main_BtnCommitImport");
             return;
         }
 
-        await RunImportAsync(orchestrator, rows, headerRow, originalRows, barcodeColumnIndex);
+        await RunImportAsync(orchestrator, rows, headerRow, originalRows, headerRowIndex, barcodeColumnIndex);
     }
 
     private async Task CommitImportAsync()
     {
-        if (_pendingRows == null || _pendingOrchestrator == null || _pendingHeaderRow == null || _pendingOriginalRows == null)
+        if (_pendingRows == null || _pendingOrchestrator == null || _pendingHeaderRow == null ||
+            _pendingOriginalRows == null || _pendingHeaderRowIndex == null)
         {
             return;
         }
@@ -1334,6 +1337,7 @@ public class MainForm : Form
         var orchestrator = _pendingOrchestrator;
         var headerRow = _pendingHeaderRow;
         var originalRows = _pendingOriginalRows;
+        var headerRowIndex = _pendingHeaderRowIndex.Value;
         var barcodeColumnIndex = _pendingBarcodeColumnIndex;
 
         if (!TryApplyBarcodeSection(orchestrator))
@@ -1343,11 +1347,11 @@ public class MainForm : Form
 
         ResetPendingImport();
 
-        await RunImportAsync(orchestrator, rows, headerRow, originalRows, barcodeColumnIndex);
+        await RunImportAsync(orchestrator, rows, headerRow, originalRows, headerRowIndex, barcodeColumnIndex);
     }
 
     private async Task RunImportAsync(ImportOrchestrator orchestrator, List<ImportRow> rows, string[] headerRow,
-        List<string[]> originalRows, int? barcodeColumnIndex)
+        List<string[]> originalRows, int headerRowIndex, int? barcodeColumnIndex)
     {
         SqlConnection? connection = null;
         try
@@ -1359,7 +1363,13 @@ public class MainForm : Form
 
             var summary = await Task.Run(() => orchestrator.Import(repository, connection, rows));
 
-            using var resultForm = new ImportResultForm(summary, headerRow, rows, originalRows, barcodeColumnIndex);
+            var (archivedPaths, archiveError) = await Task.Run(() => ArchiveGeneratedBarcodeReports(rows, originalRows, headerRowIndex, barcodeColumnIndex));
+            if (archiveError != null)
+            {
+                MessageBox.Show(this, Strings.T("Main_Msg_ArchiveGeneratedFailed", archiveError), Strings.T("Common_Warning"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
+            using var resultForm = new ImportResultForm(summary, headerRow, archivedPaths);
             resultForm.ShowDialog(this);
 
             connection.Dispose();
@@ -1377,12 +1387,49 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Auto-archives "список со сгенерированными штрих-кодами" files (the full document and the
+    /// generated-only subset) into generated_docs\full and generated_docs\generated_only next to the
+    /// exe, then prunes anything in either folder older than a month - on every import, per the user's
+    /// request, not just when this import itself produced new files. Runs on a background thread (called
+    /// via Task.Run), so it never touches the UI directly - the caller shows the returned error, if any,
+    /// after resuming on the UI thread.
+    /// </summary>
+    private ((string FullPath, string GeneratedOnlyPath)? Paths, string? Error) ArchiveGeneratedBarcodeReports(
+        List<ImportRow> rows, List<string[]> originalRows, int headerRowIndex, int? barcodeColumnIndex)
+    {
+        try
+        {
+            if (!barcodeColumnIndex.HasValue || !rows.Any(r => r.BarcodeWasGenerated))
+            {
+                GeneratedDocsStore.CleanupOldFiles();
+                return (null, null);
+            }
+
+            var sourceFileName = Path.GetFileName(_document!.FilePath);
+
+            var fullPath = GeneratedDocsStore.BuildFilePath(GeneratedDocsStore.FullDocumentsFolder, sourceFileName);
+            GeneratedBarcodeReportService.WriteDocument(fullPath, originalRows, barcodeColumnIndex.Value, rows);
+
+            var generatedOnlyPath = GeneratedDocsStore.BuildFilePath(GeneratedDocsStore.GeneratedOnlyFolder, sourceFileName);
+            GeneratedBarcodeReportService.WriteGeneratedOnlyDocument(generatedOnlyPath, originalRows, headerRowIndex, barcodeColumnIndex.Value, rows);
+
+            GeneratedDocsStore.CleanupOldFiles();
+            return ((fullPath, generatedOnlyPath), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
+    }
+
     private void ResetPendingImport()
     {
         _pendingRows = null;
         _pendingOrchestrator = null;
         _pendingHeaderRow = null;
         _pendingOriginalRows = null;
+        _pendingHeaderRowIndex = null;
         _pendingBarcodeColumnIndex = null;
         _barcodeIssueRows = null;
         SetBarcodeSectionVisible(false);
