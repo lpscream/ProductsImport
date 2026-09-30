@@ -13,9 +13,6 @@
     <LangVersion>latest</LangVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirects>true</GenerateBindingRedirects>
-    <!-- NPOI 2.8.0 bundles the OSMF-licensed fonts it uses for layout metrics and requires this
-         acknowledgement, or the build emits an "accept the OSMF EULA" warning on every build. -->
-    <AcceptNPOIOSMFLicense>true</AcceptNPOIOSMFLicense>
   </PropertyGroup>
 
   <ItemGroup>

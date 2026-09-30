@@ -23,7 +23,7 @@ public static class GeneratedBarcodeReportService
         for (var r = 0; r < originalRows.Count; r++)
         {
             // originalRows is 0-based; ImportRow.SourceRowNumber is the same sheet's 1-based row number.
-            generatedByRowNumber.TryGetValue(r + 1, out var generatedBarcode);
+            var generatedBarcode = generatedByRowNumber.GetValueOrDefault(r + 1);
             WriteRow(sheet, r, originalRows[r], barcodeColumnIndex, generatedBarcode);
         }
 
